@@ -75,7 +75,7 @@ void loadObjFile(const std::string& filename) {
             //std::cout << "Normal: (" << x << ", " << y << ", " << z << ")" << std::endl;
         }
 
-        if (type == "o") {
+        if (type == "g") {
             // Start of a new object, add current shell to current object
             if (!current_shell.faces.empty()) {
                 current_object.shells.push_back(current_shell);
@@ -112,16 +112,6 @@ void loadObjFile(const std::string& filename) {
     // Add last shell to current object
     if (!current_shell.faces.empty()) {
         current_object.shells.push_back(current_shell);
-        for (const auto& shell : current_object.shells) {
-            std::cout << "Shell: " << std::endl;
-            for (const auto& face : shell.faces) {
-                std::cout << "  Face: ";
-                for (const auto& vertex : face.vertices) {
-                    std::cout << vertex << " ";
-                }
-                std::cout << std::endl;
-            }
-        }
     }
 
     // Add last object to objects map
@@ -137,6 +127,22 @@ void loadObjFile(const std::string& filename) {
         default_object_created = true;
         std::cout << "Default object created with ID: " << current_object.id << std::endl;
     }
+
+
+    for (const auto& [id, object] : objects) {
+        std::cout << "Object " << id << ":" << std::endl;
+        for (const auto& shell : object.shells) {
+            std::cout << "  Shell: " << std::endl;
+            for (const auto& face : shell.faces) {
+                std::cout << "    Face: ";
+                for (const auto& vertex : face.vertices) {
+                    std::cout << vertex << " ";
+                }
+                std::cout << std::endl;
+            }
+        }
+    }
+
 }
 
 struct VoxelGrid {
