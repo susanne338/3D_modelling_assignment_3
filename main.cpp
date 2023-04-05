@@ -28,7 +28,7 @@ typedef K::Plane_3                  Plane;
 std::vector<Point3> points;
 std::vector<K::Point_3> normals;
 
-struct Face { // the triangle
+struct Face {
     std::vector<unsigned long> vertices; // indices in vector of points
 };
 
@@ -43,7 +43,7 @@ struct Object {
 
 std::map<std::string, Object> objects;
 
-void loadObjFile(const std::string filename) {
+void loadObjFile(const std::string& filename) {
     std::ifstream infile(filename);
     if (!infile.is_open()) {
         std::cerr << "Could not open file " << filename << " for reading." << std::endl;
@@ -52,6 +52,8 @@ void loadObjFile(const std::string filename) {
     std::string line;
     Object current_object;
     Shell current_shell;
+    int default_object_id = 1;
+    bool default_object_created = false;
     while (std::getline(infile, line)) {
         std::stringstream ss(line);
         std::string type;
@@ -62,7 +64,7 @@ void loadObjFile(const std::string filename) {
             double x, y, z;
             ss >> x >> y >> z;
             points.emplace_back(x, y, z);
-//            std::cout << "Vertex: (" << x << ", " << y << ", " << z << ")" << std::endl;
+            //std::cout << "Vertex: (" << x << ", " << y << ", " << z << ")" << std::endl;
         }
 
         if (type == "vn"){
@@ -70,21 +72,39 @@ void loadObjFile(const std::string filename) {
             double x, y, z;
             ss >> x >> y >> z;
             normals.emplace_back(x, y, z);
-//            std::cout << "Normal: (" << x << ", " << y << ", " << z << ")" << std::endl;
+            //std::cout << "Normal: (" << x << ", " << y << ", " << z << ")" << std::endl;
+        }
+
+        if (type == "o") {
+            // Start of a new object, add current shell to current object
+            if (!current_shell.faces.empty()) {
+                current_object.shells.push_back(current_shell);
+                current_shell = Shell();
+            }
+
+            // Add current object to objects map
+            if (!current_object.id.empty()) {
+                objects[current_object.id] = current_object;
+            }
+
+            // Start a new object
+            current_object = Object();
+            ss >> current_object.id;
+            //std::cout << "Object: " << current_object.id << std::endl;
         }
 
         if (type == "f"){
             //Face data
             Face face;
             char ch;
-            int x, y, z;    // 3 vertices indices x=v1, y=v2, z=v3
-            int a, b, c;
+            double x, y, z;
+            double a, b, c;
             ss >> x >> ch >> ch >> a >> y >> ch >> ch >> b >> z >> ch >> ch >> c ;
             face.vertices.push_back(x - 1); // .obj file indices are 1-based
             face.vertices.push_back(y - 1);
             face.vertices.push_back(z - 1);
             current_shell.faces.push_back(face);
-            std::cout << "Face: " << x << " " << y << " " << z << std::endl;
+            //std::cout << "Face: " << x << " " << y << " " << z << std::endl;
         }
     }
     infile.close();
@@ -92,13 +112,31 @@ void loadObjFile(const std::string filename) {
     // Add last shell to current object
     if (!current_shell.faces.empty()) {
         current_object.shells.push_back(current_shell);
+        for (const auto& shell : current_object.shells) {
+            std::cout << "Shell: " << std::endl;
+            for (const auto& face : shell.faces) {
+                std::cout << "  Face: ";
+                for (const auto& vertex : face.vertices) {
+                    std::cout << vertex << " ";
+                }
+                std::cout << std::endl;
+            }
+        }
     }
 
-    // Add current object to objects map
+    // Add last object to objects map
     if (!current_object.id.empty()) {
         objects[current_object.id] = current_object;
     }
-    std::cout << "objects.size() : " << objects.size() << std::endl;
+
+    // If no objects were created, create a default object
+    if (objects.empty() && !default_object_created) {
+        current_object.id = std::to_string(default_object_id);
+        current_object.shells.push_back(current_shell);
+        objects[current_object.id] = current_object;
+        default_object_created = true;
+        std::cout << "Default object created with ID: " << current_object.id << std::endl;
+    }
 }
 
 struct VoxelGrid {
