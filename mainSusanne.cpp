@@ -166,7 +166,7 @@ std::vector<double> maxmin_coo(std::vector<Point3> allpoints) {
 };
 
 
-void create_voxelgrid(std::vector<Point3> allpoints, int res) {
+VoxelGrid create_voxelgrid(std::vector<Point3> allpoints, double res) {
 
     // maxminlist = { max_x, min_x, max_y, min_y, max_z, min_z }
     std::vector<double> maxminlist = maxmin_coo(allpoints);
@@ -174,7 +174,8 @@ void create_voxelgrid(std::vector<Point3> allpoints, int res) {
     int rows_x = int(((int(maxminlist[0])+1 - int(maxminlist[1])) / res) + 1) + 2;
     int rows_y = int(((int(maxminlist[2])+1 - int(maxminlist[3])) / res) + 1) + 2;
     int rows_z = int(((int(maxminlist[4])+1 - int(maxminlist[5])) / res) + 1) + 2;
-    VoxelGrid voxels(rows_x, rows_y, rows_z);
+    VoxelGrid voxels(rows_x, rows_y, rows_z) ;
+    return voxels;
 }
 
 Point3 modelcoo_to_voxcoo(Point3 point, std::vector<Point3> allpoints, int res) {
@@ -247,14 +248,13 @@ std::vector<Point3> vector_six_connect(Point3 coordinate){ //neighbouring voxels
     vector.insert(vector.end(), Point3(coordinate.x(), coordinate.y(), coordinate.z()+1));
 }
 
-void marking(Point3 coordinate, int id){
+void marking(Point3 coordinate, int id, VoxelGrid grid){
     std::vector<Point3> vector = vector_six_connect(coordinate);
     for (auto &point : vector) {
-        int voxelpoint = voxels(point.x(), point.y(), point.z()); //CANT ACCESS VOXELS!! HOW DO I CALL IT PROPERLY?
-        if (voxelpoint == 0) {
-            voxels(point.x(), point.y(), point.z()) = id;
-            Point3 newcoord = point;
-            marking(newcoord, id);
+        if (grid(point.x(), point.y(), point.z()) == 0) {
+            grid(point.x(), point.y(), point.z()) = id;
+            Point3 new_coord = point;
+            marking(new_coord, id, grid);
         }
         else {
                 continue;
@@ -269,26 +269,46 @@ void marking(Point3 coordinate, int id){
 
 //MAIN-----------------------------------------------------------------------------------------------------------------
 int main() {
+    double res = 0.1;
+
     //file
     //const char* filename = (argc > 1) ? argv[1] : "/Users/putiriyadi/Documents/TU/q3/3d/hw03/Duplex_A_20110907.obj";
 
     //Writing to obj
     loadObjFile(filename);
-    return 0;
+
+    //create voxelgrid
+    VoxelGrid grid = create_voxelgrid(points, res);
+
 
     //Voxelisation
     voxelisation(0.1);
 
-    //Marking WRONG
-    marking(Point3(0, 0, 0), 2); //--> thus this would mark the exterior with id 1
-    for (auto &voxel: voxels) { //--> marks rooms with each a different id, should this be a triple loop instead?
-        int i = 3;
-        if (voxel == 0) {
-            marking(Point3(voxel[0], voxel[1], voxel[2]), i);
-            i++;
-        } else {
-            continue;
+    //Marking
+    //marking exterior
+    marking(Point3(0, 0, 0), 2, grid); //--> thus this would mark the exterior with id 2
+    //marking rooms
+    int res_rooms = 3;
+    for (int i = 0; i < grid.max_x; ++i) { //--> marks rooms with each a different id
+       for (int j = 0; j < grid.max_y; ++j){
+           for (int k = 0; k < grid.max_z; ++k){
+               if (grid(i,j,k) == 0) {
+                   marking(Point3(i, j, k), res_rooms, grid);
+                   res_rooms++;
+               }
+               else {
+                       continue;
+               }
+
+               }
+           }
         }
+    //end of marking rooms
+
+    return 0;
+
+
     }
 
-}
+
+
