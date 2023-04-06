@@ -86,7 +86,9 @@ struct VoxelGrid {
 };
 
 //LOAD OBJ FILE INTO MEMORY-------------------------------------------------------------------------------------------
-std::string filename = "/mnt/c/Users/louis/Desktop/IfcOpenHouse_IFC4.obj";
+//std::string filename = "/mnt/c/Users/louis/Desktop/IfcOpenHouse_IFC4.obj";
+//std::string filename = "C:/Users/susan/OneDrive/Documenten/geomatics/GEO1004 3D modelling of the built environment/HW3/cmake-build-debug/IfcOpenHouse_IFC2x3.obj";
+std::string filename = "IfcOpenHouse_IFC2x3.obj"; //has to be places in cmake-build-debug folder
 std::vector<K::Point_3> normals;
 
 void loadObjFile(const std::string& filename) {
@@ -108,7 +110,7 @@ void loadObjFile(const std::string& filename) {
             double x, y, z;
             ss >> x >> y >> z;
             points.emplace_back(x, y, z);
-            std::cout << "Vertex: (" << x << ", " << y << ", " << z << ")" << std::endl;
+//            std::cout << "Vertex: (" << x << ", " << y << ", " << z << ")" << std::endl;
         }
 
         if (type == "vn"){
@@ -116,7 +118,7 @@ void loadObjFile(const std::string& filename) {
             double x, y, z;
             ss >> x >> y >> z;
             normals.emplace_back(x, y, z);
-            std::cout << "Normal: (" << x << ", " << y << ", " << z << ")" << std::endl;
+//            std::cout << "Normal: (" << x << ", " << y << ", " << z << ")" << std::endl;
         }
 
         if (type == "f"){
@@ -130,9 +132,10 @@ void loadObjFile(const std::string& filename) {
             face.vertices.push_back(y - 1);
             face.vertices.push_back(z - 1);
             current_shell.faces.push_back(face);
-            std::cout << "Face: " << x << " " << y << " " << z << std::endl;
+//            std::cout << "Face: " << x << " " << y << " " << z << std::endl;
         }
     }
+    std::cout << "obj file is read" << std::endl;
     infile.close();
 
     // Add last shell to current object
@@ -238,22 +241,44 @@ int voxelisation(double res) {
 
 
 //MARKING----------------------------------------------------------------------------------------------------------------
-std::vector<Point3> vector_six_connect(Point3 coordinate){ //neighbouring voxels
+std::vector<Point3> vector_six_connect(Point3 coordinate, VoxelGrid grid){ //neighbouring voxels
+//    std::list<std::list<double>> coords = {{coordinate.x()-1, coordinate.y(), coordinate.z()},{coordinate.x()+1, coordinate.y(), coordinate.z()},{coordinate.x(), coordinate.y()-1, coordinate.z(coordinate.x(), coordinate.y()+1, coordinate.z()},{coordinate.x(), coordinate.y(), coordinate.z()-1},{coordinate.x(), coordinate.y(), coordinate.z()+1}};
+//    std::list<std::list<double>> newcoords;
     std::vector<Point3> vector;
-    vector.insert(vector.end(), Point3(coordinate.x()-1, coordinate.y(), coordinate.z()));
-    vector.insert(vector.end(), Point3(coordinate.x()+1, coordinate.y(), coordinate.z()));
-    vector.insert(vector.end(), Point3(coordinate.x(), coordinate.y()-1, coordinate.z()));
-    vector.insert(vector.end(), Point3(coordinate.x(), coordinate.y()+1, coordinate.z()));
-    vector.insert(vector.end(), Point3(coordinate.x(), coordinate.y(), coordinate.z()-1));
-    vector.insert(vector.end(), Point3(coordinate.x(), coordinate.y(), coordinate.z()+1));
+    vector.push_back(Point3(coordinate.x()-1, coordinate.y(), coordinate.z()));
+    vector.push_back(Point3(coordinate.x()+1, coordinate.y(), coordinate.z()));
+    vector.push_back(Point3(coordinate.x(), coordinate.y()-1, coordinate.z()));
+    vector.push_back(Point3(coordinate.x(), coordinate.y()+1, coordinate.z()));
+    vector.push_back(Point3(coordinate.x(), coordinate.y(), coordinate.z()-1));
+    vector.push_back(Point3(coordinate.x(), coordinate.y(), coordinate.z()+1));
+    std::vector<Point3> new_vector;
+    for (auto &p : vector){
+        if ( p.x() >grid.max_x or p.x() < 0 or p.y() > grid.max_y or p.y() < 0 or p.z() > grid.max_z or p.z() < 0){
+            continue;
+        }
+        else{
+            new_vector.insert(new_vector.end(), p);
+        }
+    }
+//    for (auto& p : coords){
+//        if(p[0] > grid.max_x or p[0] < 0 or p[1] > grid.max_y or p[1] < 0 or p[2] > grid.max_z or p[2] < 0)){
+//        continue;
+//    }
+//    else:
+//    }
+    return new_vector;
 }
 
 void marking(Point3 coordinate, int id, VoxelGrid grid){
-    std::vector<Point3> vector = vector_six_connect(coordinate);
+    std::vector<Point3> vector = vector_six_connect(coordinate, grid);
+    std::cout << "vector size" << vector.size();
+    grid(coordinate.x(), coordinate.y(), coordinate.z()) = id;
+    std::cout << " id element" << grid(coordinate.x(), coordinate.y(), coordinate.z()) << std::endl;
     for (auto &point : vector) {
         if (grid(point.x(), point.y(), point.z()) == 0) {
-            grid(point.x(), point.y(), point.z()) = id;
+//            grid(point.x(), point.y(), point.z()) = id;
             Point3 new_coord = point;
+            std::cout << "id of point" << grid(point.x(), point.y(), point.z());
             marking(new_coord, id, grid);
         }
         else {
@@ -270,31 +295,36 @@ void marking(Point3 coordinate, int id, VoxelGrid grid){
 //MAIN-----------------------------------------------------------------------------------------------------------------
 int main() {
     double res = 0.1;
+//    std::string filename = "C:/Users/susan/OneDrive/Documenten/geomatics/GEO1004 3D modelling of the built environment/HW3/IfcOpenHouse_IFC2x3.obj";
+//    std::vector<K::Point_3> normals;
 
     //file
-    //const char* filename = (argc > 1) ? argv[1] : "/Users/putiriyadi/Documents/TU/q3/3d/hw03/Duplex_A_20110907.obj";
+//    const char* filename = (argc > 1) ? argv[1] : "C:/Users/susan/OneDrive/Documenten/geomatics/GEO1004 3D modelling of the built environment/HW3/IfcOpenHouse_IFC2x3.obj";
 
     //Writing to obj
     loadObjFile(filename);
 
     //create voxelgrid
     VoxelGrid grid = create_voxelgrid(points, res);
-
+    std::cout << "grid is made. print max values " << grid.max_x << " and " << grid.max_y << " and "<< grid.max_z << std::endl;
+    std::cout << "id of point 000 " << grid(0, 0, 0) << std::endl;
 
     //Voxelisation
-    voxelisation(0.1);
-
+//    voxelisation(0.1);
+    std::cout << " does this even print "<< std::endl;
     //Marking
     //marking exterior
-    marking(Point3(0, 0, 0), 2, grid); //--> thus this would mark the exterior with id 2
+    std::cout << " okay does this do shit " <<vector_six_connect(Point3(0,0,0), grid)[0] << std::endl;
+    marking(Point3(0, 0, 0), 2, grid); //--> thus this would mark the exterior with id 2, doesnt work
+    std::cout << "exterior marked" << std::endl;
     //marking rooms
-    int res_rooms = 3;
+    int id_rooms = 3;
     for (int i = 0; i < grid.max_x; ++i) { //--> marks rooms with each a different id
        for (int j = 0; j < grid.max_y; ++j){
            for (int k = 0; k < grid.max_z; ++k){
                if (grid(i,j,k) == 0) {
-                   marking(Point3(i, j, k), res_rooms, grid);
-                   res_rooms++;
+                   marking(Point3(i, j, k), id_rooms, grid);
+                   id_rooms++;
                }
                else {
                        continue;
@@ -304,6 +334,7 @@ int main() {
            }
         }
     //end of marking rooms
+    std::cout << "does it reach <<" << std::endl;
 
     return 0;
 
