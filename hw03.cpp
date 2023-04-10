@@ -215,7 +215,7 @@ Point3 modelcoo_to_voxcoo(Point3 point, std::vector<Point3> allpoints, double re
     std::vector<double> maxminlist = maxmin_coo(allpoints);
     int position_x = int((point.x() - (int(maxminlist[1]) - res)) / res);
     int position_y = int((point.y() - (int(maxminlist[3]) - res)) / res);
-    int position_z = int((point.y() - (int(maxminlist[5]) - res)) / res);
+    int position_z = int((point.z() - (int(maxminlist[5]) - res)) / res);
     return {position_x, position_y, position_z};
 }
 
