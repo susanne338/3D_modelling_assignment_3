@@ -9,12 +9,15 @@
 #include <CGAL/linear_least_squares_fitting_3.h>
 #include <CGAL/Simple_cartesian.h>
 #include <CGAL/Polygon_2.h>
+#include <utility>
 #include <vector>
 #include <fstream>
 #include <sstream>
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Polygon_mesh_processing/repair_polygon_soup.h>
 #include <CGAL/Polygon_mesh_processing/connected_components.h>
+//#include "json.hpp"
+//using json = nlohmann::json;
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
 
@@ -176,7 +179,7 @@ void loadObjFile(const std::string& filename) {
 }
 
 //VOXELGRID------------------------------------------------------------------------------------------------------------
-std::vector<double> maxmin_coo(std::vector<Point3> allpoints) {
+std::vector<double> maxmin_coo(const std::vector<Point3>& allpoints) {
     std::vector<double> maxmin;
     std::vector<double> points_x, points_y, points_z;
     for (auto &point : allpoints) {
@@ -195,14 +198,14 @@ std::vector<double> maxmin_coo(std::vector<Point3> allpoints) {
 };
 
 
-VoxelGrid create_voxelgrid(std::vector<Point3> allpoints, double res) {
+VoxelGrid create_voxelgrid(const std::vector<Point3>& allpoints, double res) {
 
     // maxminlist = { max_x, min_x, max_y, min_y, max_z, min_z }
     std::vector<double> maxminlist = maxmin_coo(allpoints);
 
-    int rows_x = int(((int(maxminlist[0])+1 - int(maxminlist[1])) / res) + 1) + 2;
-    int rows_y = int(((int(maxminlist[2])+1 - int(maxminlist[3])) / res) + 1) + 2;
-    int rows_z = int(((int(maxminlist[4])+1 - int(maxminlist[5])) / res) + 1) + 2;
+    int rows_x = int(((maxminlist[0] - maxminlist[1]) / res) + 1) + 2;
+    int rows_y = int(((maxminlist[2] - maxminlist[3]) / res) + 1) + 2;
+    int rows_z = int(((maxminlist[4] - maxminlist[5]) / res) + 1) + 2;
     std::cout << "maxmin of z: " << maxminlist[4] << " " << maxminlist[5] << std::endl;
     std::cout << "rows x, y , z: " << rows_x << " " << rows_y << " " << rows_z << std::endl;
     VoxelGrid voxels(rows_x, rows_y, rows_z) ;
@@ -210,15 +213,15 @@ VoxelGrid create_voxelgrid(std::vector<Point3> allpoints, double res) {
 }
 
 
-Point3 modelcoo_to_voxcoo(Point3 point, std::vector<Point3> allpoints, double res) {
+Point3 modelcoo_to_voxcoo(Point3 point, const std::vector<Point3>& allpoints, double res) {
     std::vector<double> maxminlist = maxmin_coo(allpoints);
-    int position_x = int(abs((point.x() - (int(maxminlist[1]) - res))) / res);
-    int position_y = int(abs((point.y() - (int(maxminlist[3]) - res))) / res);
-    int position_z = int(abs((point.z() - (int(maxminlist[5]) - res)) / res));
+    int position_x = int(abs((point.x() - (maxminlist[1] - res))) / res);
+    int position_y = int(abs((point.y() - (maxminlist[3] - res))) / res);
+    int position_z = int(abs((point.z() - (maxminlist[5] - res))) / res);
     return {position_x, position_y, position_z};
 }
 
-Point3 voxcoo_to_modelcoo(Point3 point, std::vector<Point3> allpoints, double res){
+Point3 voxcoo_to_modelcoo(Point3 point, const std::vector<Point3>& allpoints, double res){
     std::vector<double> maxminlist = maxmin_coo(allpoints);
     double x = (maxminlist[1] - res) + (point[0] * res);
     double y = (maxminlist[3] - res) + (point[0] * res);
@@ -297,6 +300,11 @@ int voxelisation(double res, VoxelGrid grid) {
                 } // end looping the triangle bounding box (max min of x, y, z)
             }
             std::cout << "size of voxel intersect: " << voxel_intersect.size() << std::endl;
+            std::vector<Point3> coo_list_intersect;
+//            for (auto voxel_coo : voxel_intersect) {
+//                Point3 real_coo = voxcoo_to_modelcoo(voxel_coo, points, res);
+//                coo_list_intersect.push_back(real_coo);
+//            }
         }
     }
     return 0;
@@ -304,7 +312,7 @@ int voxelisation(double res, VoxelGrid grid) {
 
 
 //MARKING----------------------------------------------------------------------------------------------------------------
-std::vector<Point3> vector_six_connect(Point3 coordinate, VoxelGrid grid){ //neighbouring voxels
+std::vector<Point3> vector_six_connect(Point3 coordinate, const VoxelGrid& grid){ //neighbouring voxels
 //    std::list<std::list<double>> coords = {{coordinate.x()-1, coordinate.y(), coordinate.z()},{coordinate.x()+1, coordinate.y(), coordinate.z()},{coordinate.x(), coordinate.y()-1, coordinate.z(coordinate.x(), coordinate.y()+1, coordinate.z()},{coordinate.x(), coordinate.y(), coordinate.z()-1},{coordinate.x(), coordinate.y(), coordinate.z()+1}};
 //    std::list<std::list<double>> newcoords;
     std::vector<Point3> vector;
@@ -319,10 +327,17 @@ std::vector<Point3> vector_six_connect(Point3 coordinate, VoxelGrid grid){ //nei
         if ( p.x() >(grid.max_x - 1) or p.x() < 0 or p.y() > (grid.max_y - 1) or p.y() < 0 or p.z() > (grid.max_z -1) or p.z() < 0){
             continue;
         }
+        if (grid(p.x(), p.y(), p.z()) == 0) {
+            new_vector.push_back(p);
+//            continue;
+        }
         else{
-            new_vector.insert(new_vector.end(), p);
+            continue;
+//            new_vector.insert(new_vector.end(), p);
         }
     }
+//    std::cout << "vector size " << new_vector.size() << std::endl;
+
 //    for (auto& p : coords){
 //        if(p[0] > grid.max_x or p[0] < 0 or p[1] > grid.max_y or p[1] < 0 or p[2] > grid.max_z or p[2] < 0)){
 //        continue;
@@ -334,35 +349,107 @@ std::vector<Point3> vector_six_connect(Point3 coordinate, VoxelGrid grid){ //nei
 
 void marking(Point3 coordinate, int id, VoxelGrid grid){
     std::vector<Point3> vector = vector_six_connect(coordinate, grid);
-    std::cout << "vector size" << vector.size();
-    grid(coordinate.x(), coordinate.y(), coordinate.z()) = id;
-    std::cout << " id element" << grid(coordinate.x(), coordinate.y(), coordinate.z()) << std::endl;
-    for (auto &point : vector) {
-        if (grid(point.x(), point.y(), point.z()) == 0) {
-//            grid(point.x(), point.y(), point.z()) = id;
-            Point3 new_coord = point;
-            std::cout << "coord: " << point.x() << "; " << point.y() << "; " << point.z() << std::endl;
-            std::cout << "id of point" << grid(point.x(), point.y(), point.z());
-            marking(new_coord, id, grid);
-        }
-        else {
-            continue;
-        }
+    grid(0,0,0) = 2;
+//    std::cout << "vector size " << vector.size() << std::endl;
+    if (!vector.empty()) {
+        std::cout << "vector 0: " << vector[0] << std::endl;
+        for (auto &point : vector) {
+    //        std::cout << "marking loop " << std::endl;
+            grid(point.x(), point.y(), point.z()) = id;
+            marking(point, id, grid);
 
+        }
+//    std::vector<Point3> vector = vector_six_connect(coordinate, grid);
+//    std::cout << "vector size" << vector.size();
+//    grid(coordinate.x(), coordinate.y(), coordinate.z()) = id;
+//    std::cout << " id element" << grid(coordinate.x(), coordinate.y(), coordinate.z()) << std::endl;
+//    if (!vector.empty()) {
+//        for (auto &point: vector) {
+//            if (grid(point.x(), point.y(), point.z()) == 0) {
+////            grid(point.x(), point.y(), point.z()) = id;
+//                Point3 new_coord = point;
+//                std::cout << "coord: " << point.x() << "; " << point.y() << "; " << point.z() << std::endl;
+//                std::cout << "id of point" << grid(point.x(), point.y(), point.z());
+//                marking(new_coord, id, grid);
+//            } else {
+//                continue;
+//            }
+//        }
     }
+
 }
 
+//WRITE CITYJSON--------------------------------------------------------------------------------------------------------
+//void write_cityjson(std::vector<> marked_surfaces){
+//    std::vector<Point3> vertices_all;
+//
+//    nlohmann::json json;
+//    json["type"] = "CityJSON";
+//    json["version"] = "1.1";
+//    json["transform"] = nlohmann::json::object();
+//    json["transform"]["scale"] = nlohmann::json::array({1.0, 1.0, 1.0});
+//    json["transform"]["translate"] = nlohmann::json::array({0.0, 0.0, 0.0});
+//    json["CityObjects"] = nlohmann::json::object();
+//    json["vertices"] = nlohmann::json::array({});
+//
+//    for (auto const& v : vertices)
+//
+//
+//    std::string json_string = json.dump(2);
+//    std::ofstream out_stream("mybuilding.json");
+//    out_stream << json_string;
+//    out_stream.close();
+//}
+void marking_exterior(VoxelGrid grid){
+    //marking boundary
+    for(int i =0; i < grid.max_x; ++i){
+        grid(i,0,0) = 2;
+    }
+    for(int j =0; j < grid.max_y; ++j){
+        grid(0,j,0) = 2;
+    }
+    for(int k =0; k < grid.max_z; ++k){
+        grid(0,0,k) = 2;
+    }
 
+    for(int n = 1; n < grid.max_x -1; ++n){
+        for(int o = 1; o < grid.max_y -1; ++o){
+            for(int p = 1; p < grid.max_z-1; ++p){
+
+                if (grid(n,o,p) ==0){
+                    std::vector<Point3> conn = vector_six_connect(Point3(n,o,p), grid);
+                    std::cout << "conn vector size: " << conn.size() << std::endl;
+                    for(auto&pt:conn){
+                        if(grid(pt.x(), pt.y(), pt.z()) == 2){
+                            std::cout << "assigning 2" << std::endl;
+                            grid(n,o,p) = 2;
+                            break;
+                        }
+                        else {
+                            continue;
+                        }
+                    }
+                }
+                else {
+                    continue;
+                }
+                std::cout << "id of point" << grid(n,o,p) << std::endl;
+
+            }
+        }
+    }
+    std::cout << "grid(0,0,2): " << grid(0, 0, 2) << std::endl;
+}
 
 
 
 
 //MAIN-----------------------------------------------------------------------------------------------------------------
 int main(int argc, const char * argv[]) {
-    double res = 0.1;
+    double res = 1.0;
 
     //file
-    const char* filename = (argc > 1) ? argv[1] : "/Users/putiriyadi/Documents/TU/q3/3d/hw03/Duplex_A_20110907.obj";
+    const char* filename = (argc > 1) ? argv[1] : "/Users/putiriyadi/Documents/TU/q3/3d/hw03/IfcOpenHouse_IFC2x3_relevant.obj";
 
     //Writing to obj
     loadObjFile(filename);
@@ -376,7 +463,10 @@ int main(int argc, const char * argv[]) {
     std::cout << "max x: " << grid.max_x << std::endl;
     std::cout << "max y: " << grid.max_y << std::endl;
     std::cout << "max z: " << grid.max_z << std::endl;
-    std::cout << "grid error:" << grid(24, 37, 0) << std::endl;
+//    std::cout << "grid error:" << grid(24, 37, 0) << std::endl;
+
+//    marking_exterior(grid);
+
 
     //Marking
     //marking exterior
