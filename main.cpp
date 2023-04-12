@@ -1,15 +1,8 @@
-//
-// Created by P Riyadi on 03/04/2023.
-//
-
 #include <iostream>
-#include <fstream>
-#include <sstream>
 #include <map>
 #include <list>
 #include <cassert>
 
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Constrained_Delaunay_triangulation_2.h>
 #include <CGAL/Triangulation_vertex_base_2.h>
 #include <CGAL/Triangulation_face_base_with_info_2.h>
@@ -17,14 +10,51 @@
 #include <CGAL/Simple_cartesian.h>
 #include <CGAL/Polygon_2.h>
 #include <vector>
+#include <fstream>
+#include <sstream>
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/Polygon_mesh_processing/repair_polygon_soup.h>
+#include <CGAL/Polygon_mesh_processing/connected_components.h>
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
 
 typedef K::Point_2                  Point2;
 typedef K::Point_3                  Point3;
 typedef CGAL::Polygon_2<K>          Polygon2;
-typedef K::Plane_3                  Plane;
+typedef K::Plane_3                  Plane3;
+typedef K::Line_3                   Line3;
+//const std::string input_file = Duplex_A_20110907.obj;
 
+
+struct VoxelGrid {
+    std::vector<unsigned int> voxels;
+    unsigned int max_x, max_y, max_z;
+
+    VoxelGrid(unsigned int x, unsigned int y, unsigned int z) {
+        max_x = x;
+        max_y = y;
+        max_z = z;
+        unsigned int total_voxels = x*y*z;
+        voxels.reserve(total_voxels);
+        for (unsigned int i = 0; i < total_voxels; ++i) voxels.push_back(0);
+    }
+
+    unsigned int &operator()(const unsigned int &x, const unsigned int &y, const unsigned int &z) {
+        assert(x >= 0 && x < max_x);
+        assert(y >= 0 && y < max_y);
+        assert(z >= 0 && z < max_z);
+        return voxels[x + y*max_x + z*max_x*max_y];
+    }
+
+    unsigned int operator()(const unsigned int &x, const unsigned int &y, const unsigned int &z) const {
+        assert(x >= 0 && x < max_x);
+        assert(y >= 0 && y < max_y);
+        assert(z >= 0 && z < max_z);
+        return voxels[x + y*max_x + z*max_x*max_y];
+    }
+};
+
+//LOAD OBJ FILE INTO MEMORY-------------------------------------------------------------------------------------------
 std::vector<Point3> points;
 std::vector<K::Point_3> normals;
 
@@ -145,34 +175,7 @@ void loadObjFile(const std::string& filename) {
 
 }
 
-struct VoxelGrid {
-    std::vector<unsigned int> voxels;
-    unsigned int max_x, max_y, max_z;
-
-    VoxelGrid(unsigned int x, unsigned int y, unsigned int z) {
-        max_x = x;
-        max_y = y;
-        max_z = z;
-        unsigned int total_voxels = x*y*z;
-        voxels.reserve(total_voxels);
-        for (unsigned int i = 0; i < total_voxels; ++i) voxels.push_back(0);
-    }
-
-    unsigned int &operator()(const unsigned int &x, const unsigned int &y, const unsigned int &z) {
-        assert(x >= 0 && x < max_x);
-        assert(y >= 0 && y < max_y);
-        assert(z >= 0 && z < max_z);
-        return voxels[x + y*max_x + z*max_x*max_y];
-    }
-
-    unsigned int operator()(const unsigned int &x, const unsigned int &y, const unsigned int &z) const {
-        assert(x >= 0 && x < max_x);
-        assert(y >= 0 && y < max_y);
-        assert(z >= 0 && z < max_z);
-        return voxels[x + y*max_x + z*max_x*max_y];
-    }
-};
-
+//VOXELGRID------------------------------------------------------------------------------------------------------------
 std::vector<double> maxmin_coo(std::vector<Point3> allpoints) {
     std::vector<double> maxmin;
     std::vector<double> points_x, points_y, points_z;
@@ -192,41 +195,45 @@ std::vector<double> maxmin_coo(std::vector<Point3> allpoints) {
 };
 
 
-void create_voxelgrid(std::vector<Point3> allpoints, double res) {
+VoxelGrid create_voxelgrid(std::vector<Point3> allpoints, double res) {
 
     // maxminlist = { max_x, min_x, max_y, min_y, max_z, min_z }
     std::vector<double> maxminlist = maxmin_coo(allpoints);
 
-    int rows_x = int((maxminlist[0] - maxminlist[1] / res) + 1) + 2;
-    int rows_y = int((maxminlist[2] - maxminlist[3] / res) + 1) + 2;
-    int rows_z = int((maxminlist[4] - maxminlist[5] / res) + 1) + 2;
-    VoxelGrid voxels(rows_x, rows_y, rows_z);
+    int rows_x = int(((int(maxminlist[0])+1 - int(maxminlist[1])) / res) + 1) + 2;
+    int rows_y = int(((int(maxminlist[2])+1 - int(maxminlist[3])) / res) + 1) + 2;
+    int rows_z = int(((int(maxminlist[4])+1 - int(maxminlist[5])) / res) + 1) + 2;
+    std::cout << "maxmin of z: " << maxminlist[4] << " " << maxminlist[5] << std::endl;
+    std::cout << "rows x, y , z: " << rows_x << " " << rows_y << " " << rows_z << std::endl;
+    VoxelGrid voxels(rows_x, rows_y, rows_z) ;
+    return voxels;
 }
+
 
 Point3 modelcoo_to_voxcoo(Point3 point, std::vector<Point3> allpoints, double res) {
     std::vector<double> maxminlist = maxmin_coo(allpoints);
-    int position_x = int((point.x() - (int(maxminlist[1]) - res)) / res);
-    int position_y = int((point.y() - (int(maxminlist[3]) - res)) / res);
-    int position_z = int((point.y() - (int(maxminlist[5]) - res)) / res);
-    return Point3(position_x, position_y, position_z);
+    int position_x = int(abs((point.x() - (int(maxminlist[1]) - res))) / res);
+    int position_y = int(abs((point.y() - (int(maxminlist[3]) - res))) / res);
+    int position_z = int(abs((point.z() - (int(maxminlist[5]) - res)) / res));
+    return {position_x, position_y, position_z};
 }
 
-Point3 voxcoo_to_modelcoo(Point3 point, std::vector<Point3> allpoints, int res){
+Point3 voxcoo_to_modelcoo(Point3 point, std::vector<Point3> allpoints, double res){
     std::vector<double> maxminlist = maxmin_coo(allpoints);
     double x = (maxminlist[1] - res) + (point[0] * res);
     double y = (maxminlist[3] - res) + (point[0] * res);
-    double z = (maxminlist[5] - res)+ (point[0] * res);
+    double z = (maxminlist[5] - res) + (point[0] * res);
     //Gives minimum coordinate of the voxel
     return Point3(x, y, z);
+
 }
 
-
-int voxelisation(double res) {
-    std::cout << "line 181" << std::endl;
+//VOXELISATION---------------------------------------------------------------------------------------------------------
+int voxelisation(double res, VoxelGrid grid) {
     std::cout << "size of object, shell: " << objects.size() << std::endl;
     for (const auto& object : objects) {
         for (const auto &shell: object.second.shells) {
-            std::cout << "line 184" << std::endl;
+            std::vector<Point3> voxel_intersect;
             for (const auto &face: shell.faces) {
                 // computing axis-oriented bounding box of a triangle
                 // -> the min & max of x, y, z
@@ -234,40 +241,170 @@ int voxelisation(double res) {
                 for (auto faceid: face.vertices) {
                     tri_coo.push_back(points[faceid]);
                 }
+//                std::cout <<"triangle coord: " << tri_coo[0] << "; " << tri_coo[1] << "; " << tri_coo[2] << std::endl;
                 std::vector<double> maxmin_xyz = maxmin_coo(tri_coo);
-                Point3 min_pt(maxmin_xyz[0], maxmin_xyz[2], maxmin_xyz[4]);
-                Point3 min_pt_vox = modelcoo_to_voxcoo(min_pt, points, 0.1);
-                Point3 max_pt(maxmin_xyz[1], maxmin_xyz[3], maxmin_xyz[5]);
-                Point3 max_pt_vox = modelcoo_to_voxcoo(max_pt, points, 0.1);
+                Point3 max_pt(maxmin_xyz[0], maxmin_xyz[2], maxmin_xyz[4]);
+                Point3 max_pt_vox = modelcoo_to_voxcoo(max_pt, points, res);
+                Point3 min_pt(maxmin_xyz[1], maxmin_xyz[3], maxmin_xyz[5]);
+                Point3 min_pt_vox = modelcoo_to_voxcoo(min_pt, points, res);
                 std::vector<Point3> voxel_coordinates;
-                std::vector<double> yvoxels;
-                std::vector<double> zvoxels;
-                std::cout << "line 198" << std::endl;
+//                std::vector<Point3> voxel_intersect;
+//                std::cout << "max pt: " << max_pt << std::endl;
+//                std::cout << "min pt: " << min_pt << std::endl;
+//                std::cout << "max pt voxel: " << max_pt_vox << std::endl;
+//                std::cout << "min pt voxel: " << min_pt_vox << std::endl;
+                int step = 1;
+                Plane3 triangle(tri_coo[0], tri_coo[1], tri_coo[2]);
 
-                for (double i = min_pt_vox.x(); i <= max_pt_vox.x(); ++res) {
-                    for (double j = min_pt_vox.y(); j <= max_pt_vox.y(); ++res) {
-                        for (double k = min_pt_vox.z(); k <= max_pt_vox.z(); ++res) {
+                int i = int(min_pt_vox.x());
+                while (i <= max_pt_vox.x()) {
+                    int j = int(min_pt_vox.y());
+                    while (j <= max_pt_vox.y()) {
+                        int k = int(min_pt_vox.z());
+                        while (k <= max_pt_vox.z()) {
                             Point3 vox(i, j, k);
+//                            std::cout << i << " " << j << " " << k << std::endl;
                             voxel_coordinates.push_back(vox);
-                        }
-                    }
-                }
-                std::cout << "size of voxel coord: " << voxel_coordinates.size() << std::endl;
 
+                            // 26-connectivity
+                            // (a) top - down line
+                            Point3 a_start(vox.x() + (0.5 * res), vox.y() + (0.5 * res), vox.z());
+                            Point3 a_end(vox.x() + (0.5 * res), vox.y() + (0.5 * res), vox.z() + res);
+                            Line3 a_line(a_start, a_end);
+                            // (b) front - back line
+                            Point3 b_start(vox.x() + (0.5 * res), vox.y(), vox.z() + 0.5 * res);
+                            Point3 b_end(vox.x() + (0.5 * res), vox.y() + res, vox.z() + 0.5 * res);
+                            Line3 b_line(b_start, b_end);
+                            // (c) left - right line
+                            Point3 c_start(vox.x(), vox.y() + (0.5 * res), vox.z() + 0.5 * res);
+                            Point3 c_end(vox.x() + res, vox.y() + (0.5 * res), vox.z() + 0.5 * res);
+                            Line3 c_line(c_start, c_end);
+                            // check intersection triangle(plane) & line
+                            bool intersects_linea = CGAL::do_intersect(a_line, triangle);
+                            bool intersects_lineb = CGAL::do_intersect(b_line, triangle);
+                            bool intersects_linec = CGAL::do_intersect(c_line, triangle);
+                            bool intersects_any = intersects_linea || intersects_lineb || intersects_linec;
+
+                            if (intersects_any) {
+                                voxel_intersect.push_back(vox);
+                                grid(i, j, k) = 1;
+                            }
+                            k += step;
+                        }
+                        j += step;
+                    }
+                    i += step;
+                } // end looping the triangle bounding box (max min of x, y, z)
             }
+            std::cout << "size of voxel intersect: " << voxel_intersect.size() << std::endl;
         }
     }
     return 0;
 }
 
 
-int main (int argc, const char * argv[]) {
+//MARKING----------------------------------------------------------------------------------------------------------------
+std::vector<Point3> vector_six_connect(Point3 coordinate, VoxelGrid grid){ //neighbouring voxels
+//    std::list<std::list<double>> coords = {{coordinate.x()-1, coordinate.y(), coordinate.z()},{coordinate.x()+1, coordinate.y(), coordinate.z()},{coordinate.x(), coordinate.y()-1, coordinate.z(coordinate.x(), coordinate.y()+1, coordinate.z()},{coordinate.x(), coordinate.y(), coordinate.z()-1},{coordinate.x(), coordinate.y(), coordinate.z()+1}};
+//    std::list<std::list<double>> newcoords;
+    std::vector<Point3> vector;
+    vector.push_back(Point3(coordinate.x()-1, coordinate.y(), coordinate.z()));
+    vector.push_back(Point3(coordinate.x()+1, coordinate.y(), coordinate.z()));
+    vector.push_back(Point3(coordinate.x(), coordinate.y()-1, coordinate.z()));
+    vector.push_back(Point3(coordinate.x(), coordinate.y()+1, coordinate.z()));
+    vector.push_back(Point3(coordinate.x(), coordinate.y(), coordinate.z()-1));
+    vector.push_back(Point3(coordinate.x(), coordinate.y(), coordinate.z()+1));
+    std::vector<Point3> new_vector;
+    for (auto &p : vector){
+        if ( p.x() >(grid.max_x - 1) or p.x() < 0 or p.y() > (grid.max_y - 1) or p.y() < 0 or p.z() > (grid.max_z -1) or p.z() < 0){
+            continue;
+        }
+        else{
+            new_vector.insert(new_vector.end(), p);
+        }
+    }
+//    for (auto& p : coords){
+//        if(p[0] > grid.max_x or p[0] < 0 or p[1] > grid.max_y or p[1] < 0 or p[2] > grid.max_z or p[2] < 0)){
+//        continue;
+//    }
+//    else:
+//    }
+    return new_vector;
+}
+
+void marking(Point3 coordinate, int id, VoxelGrid grid){
+    std::vector<Point3> vector = vector_six_connect(coordinate, grid);
+    std::cout << "vector size" << vector.size();
+    grid(coordinate.x(), coordinate.y(), coordinate.z()) = id;
+    std::cout << " id element" << grid(coordinate.x(), coordinate.y(), coordinate.z()) << std::endl;
+    for (auto &point : vector) {
+        if (grid(point.x(), point.y(), point.z()) == 0) {
+//            grid(point.x(), point.y(), point.z()) = id;
+            Point3 new_coord = point;
+            std::cout << "coord: " << point.x() << "; " << point.y() << "; " << point.z() << std::endl;
+            std::cout << "id of point" << grid(point.x(), point.y(), point.z());
+            marking(new_coord, id, grid);
+        }
+        else {
+            continue;
+        }
+
+    }
+}
+
+
+
+
+
+
+//MAIN-----------------------------------------------------------------------------------------------------------------
+int main(int argc, const char * argv[]) {
+    double res = 0.1;
+
+    //file
     const char* filename = (argc > 1) ? argv[1] : "/Users/putiriyadi/Documents/TU/q3/3d/hw03/Duplex_A_20110907.obj";
+
+    //Writing to obj
     loadObjFile(filename);
-//    create_voxelgrid(points, 0.1);
-    voxelisation(0.1);
+
+    //create voxelgrid
+    VoxelGrid grid = create_voxelgrid(points, res);
+    std::cout <<"vector six func: " << vector_six_connect(Point3(0, 0, 0), grid)[0][0] << std::endl;
+
+    //Voxelisation
+    voxelisation(res, grid);
+    std::cout << "max x: " << grid.max_x << std::endl;
+    std::cout << "max y: " << grid.max_y << std::endl;
+    std::cout << "max z: " << grid.max_z << std::endl;
+    std::cout << "grid error:" << grid(24, 37, 0) << std::endl;
+
+    //Marking
+    //marking exterior
+    std::cout << " okay does this do shit " <<vector_six_connect(Point3(0,0,0), grid)[0] << std::endl;
+    marking(Point3(0, 0, 0), 2, grid); //--> thus this would mark the exterior with id 2, doesnt work
+    std::cout << "exterior marked" << std::endl;
+    //marking rooms
+//    int id_rooms = 3;
+//    for (int i = 0; i < grid.max_x; ++i) { //--> marks rooms with each a different id
+//        for (int j = 0; j < grid.max_y; ++j){
+//            for (int k = 0; k < grid.max_z; ++k){
+//                if (grid(i,j,k) == 0) {
+//                    marking(Point3(i, j, k), id_rooms, grid);
+//                    id_rooms++;
+//                }
+//                else {
+//                    continue;
+//                }
+//
+//            }
+//        }
+//    }
+//    //end of marking rooms
+//    std::cout << "does it reach <<" << std::endl;
 
     return 0;
+
+
 }
 
 
