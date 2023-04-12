@@ -314,28 +314,37 @@ std::vector<Point3> vector_six_connect(Point3 coordinate, VoxelGrid grid){ //nei
     }
     return new_vector;
 }
+std::vector<Point3> vector_six_connect_2(Point3 coordinate, VoxelGrid grid){ //neighbouring voxels
+    std::vector<Point3> vector1;
+    vector1.push_back(Point3(coordinate.x() - 1, coordinate.y(), coordinate.z()));
+    vector1.push_back(Point3(coordinate.x() + 1, coordinate.y(), coordinate.z()));
+    vector1.push_back(Point3(coordinate.x(), coordinate.y()-1, coordinate.z()));
+    vector1.push_back(Point3(coordinate.x(), coordinate.y()+1, coordinate.z()));
+    vector1.push_back(Point3(coordinate.x(), coordinate.y(), coordinate.z()-1));
+    vector1.push_back(Point3(coordinate.x(), coordinate.y(), coordinate.z()+1));
 
+    std::vector<Point3> new_vector;
+    for (auto &p : vector1){
+        if (  p.x() >grid.max_x or p.x() < 0 or p.y() > grid.max_y or p.y() < 0 or p.z() > grid.max_z or p.z() < 0){
+            continue;
+        }
+        else{
+            new_vector.push_back(p);
+        }
+    }
+    return new_vector;
+}
+
+//SMALLER RECURSIVE FUNCTION
 void marking(Point3 coordinate, int id, VoxelGrid grid){
-    std::vector<Point3> vector = vector_six_connect(coordinate,grid);
-    grid(coordinate.x(), coordinate.y(), coordinate.z()) = id;
+    std::vector<Point3> vector = vector_six_connect(coordinate, grid);
+    grid(0,0,0) = 2;
     for (auto &point : vector) {
-        if (grid(point.x(), point.y(), point.z()) == 0) {
-            Point3 new_coord = point;
-            std::vector<Point3> new_vec = vector_six_connect(point, grid);
-            for (auto&pt : new_vec){
-                vector.push_back(pt);
-            }
-//            marking(new_coord, id, grid);
-        }
-        else {
-                continue;
-        }
-
-        }
-    for (auto & pt : vector){
+        grid(point.x(), point.y(), point.z()) = id;
+        marking(point, id, grid);
 
     }
-    }
+}
 
 //std::vector<Point3> marking_try_two(Point3 coord, VoxelGrid grid){
 //    std::vector<Point3> exterior_pts;
@@ -357,6 +366,7 @@ void marking(Point3 coordinate, int id, VoxelGrid grid){
 //        }
 //    }
 //}
+//NON-RECURSIVE MARKING EXTERIOR FUNCTION. REQUIRES YOU TO TAKE OUT THE !=0 CONDITION IN THE 6-CONNECT FUNCTION
 void marking_exterior(VoxelGrid grid){
     //marking boundary
     for(int i =0; i < grid.max_x; ++i){
@@ -372,12 +382,12 @@ void marking_exterior(VoxelGrid grid){
         for(int o = 1; o < grid.max_y -1; ++o){
             for(int p = 1; p < grid.max_z-1; ++p){
 
-                if (grid(n,o,p) ==0){
-                    std::vector<Point3> conn = vector_six_connect(Point3(n,o,p), grid);
+                if (grid(n,o,p) == 0){
+                    std::vector<Point3> conn = vector_six_connect_2(Point3(n,o,p), grid);
                     for(auto&pt:conn){
                         if(grid(pt.x(), pt.y(), pt.z()) == 2){
                             grid(n,o,p) = 2;
-                            continue;
+                            break;
                         }
                         else {
                             continue;
@@ -387,7 +397,7 @@ void marking_exterior(VoxelGrid grid){
                 else {
                     continue;
                     }
-                std::cout << "id of point" << grid(n,o,p) << std::endl;
+                std::cout << "id of point" <<n<<o<<p << " is " <<grid(n,o,p) << std::endl;
 
 
 
