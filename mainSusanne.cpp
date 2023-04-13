@@ -318,7 +318,7 @@ std::vector<Point3> vector_six_connect(Point3 coordinate, VoxelGrid grid){ //nei
 
     std::vector<Point3> new_vector;
     for (auto &p : vector1){
-        if (  p.x() >grid.max_x or p.x() < 0 or p.y() > grid.max_y or p.y() < 0 or p.z() > grid.max_z or p.z() < 0){
+        if (  p.x() > grid.max_x -1 or p.x() < 0 or p.y() > grid.max_y -1 or p.y() < 0 or p.z() > grid.max_z -1 or p.z() < 0){
             continue;
         }
         if(grid(p.x(), p.y(), p.z()) != 0){
@@ -682,33 +682,89 @@ int triTable[256][16] =
          {0, 3, 8, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},
          {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}};
 
-void triangles_calc(Point3 voxel, VoxelGrid& grid, double res){
+std::vector<std::vector<Point3>> march_cube(Point3 voxel, VoxelGrid& grid, double res, int id){
     int cubeindex = 0;
-    if (grid(voxel.x(), voxel.y()-1, voxel.z()) == 1) {
+    //vertex 0
+    if (grid(voxel.x(), voxel.y()+1, voxel.z()) == id) {
         cubeindex += 1;
     }
-    if (grid(voxel.x() +1, voxel.y() -1, voxel.z()) == 1) {
+    //vertex 1
+    if (grid(voxel.x() +1, voxel.y() +1, voxel.z()) == id) {
         cubeindex += 2;
     }
-    //etc ,4,8,16,32,64,128
+    //vertex 2
+    if (grid(voxel.x() +1, voxel.y(), voxel.z()) == id) {
+        cubeindex += 4;
+    }
+    //vertex 3
+    if (grid(voxel.x() +1, voxel.y(), voxel.z()) == id) {
+        cubeindex += 8;
+    }
+    //vertex 4
+    if (grid(voxel.x(), voxel.y() + 1, voxel.z() + 1) == id) {
+        cubeindex += 16;
+    }
+    //vertex 5
+    if (grid(voxel.x() +1, voxel.y() + 1, voxel.z() + 1) == id) {
+        cubeindex += 32;
+    }
+    //vertex 6
+    if (grid(voxel.x() +1, voxel.y(), voxel.z() + 1) == id) {
+        cubeindex += 64;
+    }
+    //vertex 7
+    if (grid(voxel.x(), voxel.y() + 1, voxel.z() + 1) == id) {
+        cubeindex += 128;
+    }
 
-    Point3 edge_1 = Point3(voxel.x() + 0.5 * res, voxel.y() + res, voxel.z());
-    //etc ,0,1,2,3,4,5,6,7,8,9,10,11
 
-    std::vector<Point3> edge_list;
-    edge_list.push_back(edge_1);
-    //etc
+    Point3 edge_0 = Point3(voxel.x() + 0.5 * res, voxel.y() + res, voxel.z());
+    Point3 edge_1 = Point3(voxel.x() + res, voxel.y() + 0.5 * res, voxel.z());
+    Point3 edge_2 = Point3(voxel.x() + 0.5 * res, voxel.y(), voxel.z());
+    Point3 edge_3 = Point3(voxel.x(), voxel.y() + 0.5 * res, voxel.z());
+
+    Point3 edge_4 = Point3(voxel.x() + 0.5 * res, voxel.y() + res, voxel.z()+ res);
+    Point3 edge_5 = Point3(voxel.x() + res, voxel.y() + 0.5 * res, voxel.z()+ res);
+    Point3 edge_6 = Point3(voxel.x() + 0.5 * res, voxel.y(), voxel.z()+ res);
+    Point3 edge_7 = Point3(voxel.x() , voxel.y() + 0.5 * res, voxel.z()+  res);
+
+    Point3 edge_8 = Point3(voxel.x(), voxel.y() + res, voxel.z()+ 0.5 * res);
+    Point3 edge_9 = Point3(voxel.x() + res, voxel.y() + res, voxel.z()+ 0.5 *  res);
+    Point3 edge_10 = Point3(voxel.x() + res, voxel.y(), voxel.z()+ 0.5 *  res);
+    Point3 edge_11 = Point3(voxel.x() , voxel.y(), voxel.z()+ 0.5 *   res);
+
+    std::vector<Point3> edge_list = {edge_0, edge_1, edge_2, edge_3, edge_4, edge_5, edge_6, edge_7, edge_8, edge_9, edge_10, edge_11};
+
 
     std::vector<std::vector<Point3>> triangles;
     for(int i=0; triTable[cubeindex][i] != -1; i+=3){
         std::vector<Point3> triangle;
         triangle.push_back(edge_list[i]);
         triangle.push_back(edge_list[i+1]);
-        triangle.push_back(edge_list[i+1]);
+        triangle.push_back(edge_list[i+2]);
         triangles.push_back(triangle);
     }
+return triangles;
+}
 
+std::vector<std::vector<Point3>> surface_extraction(VoxelGrid& grid, double res, int id1, int id2){
+    std::vector<std::vector<Point3>> surface;
+    for(int n = 1; n < grid.max_x -1; ++n){
+        for(int o = 1; o < grid.max_y -1; ++o){
+            for(int p = 1; p < grid.max_z-1; ++p){
+                if (grid(n,o,p) == id1){
+                    //all building points are checked for exterior points
+                    std::vector<std::vector<Point3>> triangles = march_cube(Point3(n,o,p), grid, res, id2);
+                    for(auto& triangle: triangles){
+                        surface.push_back(triangle);
+                    }
+                }
+            }
 
+            }
+
+            }
+    return surface;
 }
 
 //MAIN-----------------------------------------------------------------------------------------------------------------
@@ -719,40 +775,55 @@ int main() {
     loadObjFile(filename);
 
     //create voxelgrid
-//    VoxelGrid grid = create_voxelgrid(points, res);
+    VoxelGrid grid = create_voxelgrid(points, res);
 
     //trying out stuff with POINTERS, this makes the voxelisation run on my computer.
-    double rowx = create_voxelgrid2(points,res)[0];
-    double rowy = create_voxelgrid2(points,res)[1];
-    double rowz = create_voxelgrid2(points,res)[2];
-    VoxelGrid *pointer_vox;
-    VoxelGrid voxels(rowx,rowy,rowz) ;
-    pointer_vox = &voxels;
+//    double rowx = create_voxelgrid2(points,res)[0];
+//    double rowy = create_voxelgrid2(points,res)[1];
+//    double rowz = create_voxelgrid2(points,res)[2];
+//    VoxelGrid *pointer_vox;
+//    VoxelGrid voxels(rowx,rowy,rowz) ;
+//    pointer_vox = &voxels;
 
 
     //Voxelisation
-    voxelisation(res, voxels);
+    voxelisation(res, grid);
 //    std::cout << " does this even print "<< std::endl;
     //Marking
     //marking exterior
-    marking(Point3(0,0,0), 2, voxels);
+//     marking(Point3(0,0,0), 2, voxels);
     //marking rooms
-//    int id_rooms = 3;
-//    for (int i = 0; i < grid.max_x; ++i) { //--> marks rooms with each a different id
-//       for (int j = 0; j < grid.max_y; ++j){
-//           for (int k = 0; k < grid.max_z; ++k){
-//               if (grid(i,j,k) == 0) {
-//                   marking(Point3(i, j, k), id_rooms, grid);
-//                   id_rooms++;
-//               }
-//               else {
-//                       continue;
-//               }
-//
-//               }
-//           }
-//        }
+    int id_rooms = 3;
+    for (int i = 0; i < grid.max_x; ++i) { //--> marks rooms with each a different id
+       for (int j = 0; j < grid.max_y; ++j){
+           for (int k = 0; k < grid.max_z; ++k){
+               if (grid(i,j,k) == 0) {
+                   marking(Point3(i, j, k), id_rooms, grid);
+                   id_rooms++;
+               }
+               else {
+                       continue;
+               }
+
+               }
+           }
+        }
     //end of marking rooms
+
+    //SURFACE
+    //outer envelope
+    //gives a vector consisting of triangles with each 3 points
+    std::vector<std::vector<Point3>> surface_outer = surface_extraction(grid, res, 1, 1);
+
+    //rooms
+    //i is the room number.
+    std::vector<std::vector<std::vector<Point3>>> room_surfaces;
+    for (int i = 3; i <= id_rooms; ++i){
+        room_surfaces.push_back(surface_extraction(grid, res, i, 1));
+    }
+
+
+
 
     return 0;
 
