@@ -741,23 +741,20 @@ std::vector<std::vector<Point3>> march_cube(Point3 voxel, VoxelGrid& grid, doubl
         std::vector<Point3> triangle;
         triangle.push_back(edge_list[triTable[cubeindex][i]]);
         triangle.push_back(edge_list[triTable[cubeindex][i + 1]]);
-        triangle.push_back(edge_list[triTable[cubeindex][i + 2]);
+        triangle.push_back(edge_list[triTable[cubeindex][i + 2]]);
         triangles.push_back(triangle);
     }
 return triangles;
 }
 
-std::vector<std::vector<Point3>> surface_extraction(VoxelGrid& grid, double res, int id1, int id2){
+std::vector<std::vector<Point3>> surface_extraction(VoxelGrid& grid, double res, int id){
     std::vector<std::vector<Point3>> surface;
     for(int n = 1; n < grid.max_x -1; ++n){
         for(int o = 1; o < grid.max_y -1; ++o){
             for(int p = 1; p < grid.max_z-1; ++p){
-                if (grid(n,o,p) == id1){
-                    //all building points are checked for exterior points
-                    std::vector<std::vector<Point3>> triangles = march_cube(Point3(n,o,p), grid, res, id2);
+                    std::vector<std::vector<Point3>> triangles = march_cube(Point3(n,o,p), grid, res, id);
                     for(auto& triangle: triangles){
                         surface.push_back(triangle);
-                    }
                 }
             }
 
@@ -814,13 +811,13 @@ int main() {
     //SURFACE
     //outer envelope
     //gives a vector consisting of triangles with each 3 points
-    std::vector<std::vector<Point3>> surface_outer = surface_extraction(grid, res, 1, 1);
+    std::vector<std::vector<Point3>> surface_outer = surface_extraction(grid, res, 1);
 
     //rooms
     //i is the room number.
     std::vector<std::vector<std::vector<Point3>>> room_surfaces;
     for (int i = 3; i <= id_rooms; ++i){
-        room_surfaces.push_back(surface_extraction(grid, res, i, 1));
+        room_surfaces.push_back(surface_extraction(grid, res, i));
     }
 
 
