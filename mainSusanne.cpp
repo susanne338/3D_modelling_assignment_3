@@ -152,7 +152,7 @@ void loadObjFile(const std::string& filename) {
 }
 
 //VOXELGRID------------------------------------------------------------------------------------------------------------
-std::vector<double> maxmin_coo(std::vector<Point3> allpoints) {
+std::vector<double> maxmin_coo(std::vector<Point3>& allpoints) {
     std::vector<double> maxmin;
     std::vector<double> points_x, points_y, points_z;
     for (auto &point : allpoints) {
@@ -182,7 +182,7 @@ std::vector<double> maxmin_coo(std::vector<Point3> allpoints) {
 //    VoxelGrid voxels(rows_x, rows_y, rows_z) ;
 //    return voxels;
 //}
-VoxelGrid create_voxelgrid(std::vector<Point3> allpoints, double res) {
+VoxelGrid create_voxelgrid(std::vector<Point3>& allpoints, double res) {
 
     // maxminlist = { max_x, min_x, max_y, min_y, max_z, min_z }
     std::vector<double> maxminlist = maxmin_coo(allpoints);
@@ -193,8 +193,22 @@ VoxelGrid create_voxelgrid(std::vector<Point3> allpoints, double res) {
     VoxelGrid voxels(rows_x, rows_y, rows_z) ;
     return voxels;
 }
+std::vector<double> create_voxelgrid2(std::vector<Point3> allpoints, double res) {
 
-Point3 modelcoo_to_voxcoo(Point3 point, std::vector<Point3> allpoints, int res) {
+    // maxminlist = { max_x, min_x, max_y, min_y, max_z, min_z }
+    std::vector<double> maxminlist = maxmin_coo(allpoints);
+    std::vector<double> rows;
+
+    int rows_x = int(((maxminlist[0]- maxminlist[1]) / res) + 1) + 2;
+    int rows_y = int(((maxminlist[2] - maxminlist[3]) / res) + 1) + 2;
+    int rows_z = int(((maxminlist[4] - maxminlist[5]) / res) + 1) + 2;
+    rows.push_back(rows_x);
+    rows.push_back(rows_y);
+    rows.push_back(rows_z);
+    return rows;
+}
+
+Point3 modelcoo_to_voxcoo(Point3 point, std::vector<Point3>& allpoints, int res) {
     std::vector<double> maxminlist = maxmin_coo(allpoints);
     int position_x = int(abs((point.x() - (maxminlist[1] - res))) / res);
     int position_y = int((point.y() - (maxminlist[3] - res)) / res);
@@ -202,7 +216,7 @@ Point3 modelcoo_to_voxcoo(Point3 point, std::vector<Point3> allpoints, int res) 
     return Point3(position_x, position_y, position_z);
 }
 
-Point3 voxcoo_to_modelcoo(Point3 point, std::vector<Point3> allpoints, int res){
+Point3 voxcoo_to_modelcoo(Point3 point, std::vector<Point3>& allpoints, int res){
     std::vector<double> maxminlist = maxmin_coo(allpoints);
     double x = (maxminlist[1] - res) + (point[0] * res);
     double y = (maxminlist[3] - res) + (point[0] * res);
@@ -213,7 +227,7 @@ Point3 voxcoo_to_modelcoo(Point3 point, std::vector<Point3> allpoints, int res){
 }
 
 //VOXELISATION---------------------------------------------------------------------------------------------------------
-int voxelisation(double res, VoxelGrid grid) {
+int voxelisation(double res, VoxelGrid& grid) {
     std::cout << "line 181" << std::endl;
     std::cout << "size of object, shell: " << objects.size() << std::endl;
     for (const auto& object : objects) {
@@ -291,6 +305,8 @@ int voxelisation(double res, VoxelGrid grid) {
 
 
 //MARKING----------------------------------------------------------------------------------------------------------------
+
+//6CONNECT FOR RECURSIVE FUNCTION
 std::vector<Point3> vector_six_connect(Point3 coordinate, VoxelGrid grid){ //neighbouring voxels
     std::vector<Point3> vector1;
     vector1.push_back(Point3(coordinate.x() - 1, coordinate.y(), coordinate.z()));
@@ -314,6 +330,7 @@ std::vector<Point3> vector_six_connect(Point3 coordinate, VoxelGrid grid){ //nei
     }
     return new_vector;
 }
+//6CONNECT FOR NON-RECURSIVE FUNCTION
 std::vector<Point3> vector_six_connect_2(Point3 coordinate, VoxelGrid grid){ //neighbouring voxels
     std::vector<Point3> vector1;
     vector1.push_back(Point3(coordinate.x() - 1, coordinate.y(), coordinate.z()));
@@ -336,38 +353,39 @@ std::vector<Point3> vector_six_connect_2(Point3 coordinate, VoxelGrid grid){ //n
 }
 
 //SMALLER RECURSIVE FUNCTION
-void marking(Point3 coordinate, int id, VoxelGrid grid){
+//void marking2(Point3 coordinate, int id, VoxelGrid& grid){
+//    std::vector<Point3> vector = vector_six_connect(coordinate, grid);
+//    grid(0,0,0) = 2;
+//    for (auto &point : vector) {
+//        grid(point.x(), point.y(), point.z()) = id;
+//        marking2(point, id, grid);
+//
+//    }
+//}
+//MARKING FUNCTION
+void marking(Point3 coordinate, int id, VoxelGrid& grid){
     std::vector<Point3> vector = vector_six_connect(coordinate, grid);
-    grid(0,0,0) = 2;
+    std::cout << "vector size" << vector.size();
+    grid(coordinate.x(), coordinate.y(), coordinate.z()) = id;
+//    std::cout << " id element" << grid(coordinate.x(), coordinate.y(), coordinate.z()) << std::endl;
     for (auto &point : vector) {
-        grid(point.x(), point.y(), point.z()) = id;
-        marking(point, id, grid);
+        if (grid(point.x(), point.y(), point.z()) == 0) {
+//            grid(point.x(), point.y(), point.z()) = id;
+            Point3 new_coord = point;
+//            std::cout << "coord: " << point.x() << "; " << point.y() << "; " << point.z() << std::endl;
+//            std::cout << "id of point" << grid(point.x(), point.y(), point.z());
+            marking(new_coord, id, grid);
+        }
+        else {
+            continue;
+        }
 
     }
 }
 
-//std::vector<Point3> marking_try_two(Point3 coord, VoxelGrid grid){
-//    std::vector<Point3> exterior_pts;
-//
-//    int i = int(coord.x());
-//    int j = int(coord.y());
-//    int k = int(coord.z());
-//    while (k <= grid.max_z){
-//        while (j <= grid.max_y){
-//            while (i <= grid.max_x){
-//                if (grid(i,j,k) == 0){
-//                    exterior_pts.push_back(Point3(i,j,k));
-//                }
-//                if (grid(i,j,k) != 0){
-//                    int l = grid.max_x;
-//                }
-//
-//            }
-//        }
-//    }
-//}
-//NON-RECURSIVE MARKING EXTERIOR FUNCTION. REQUIRES YOU TO TAKE OUT THE !=0 CONDITION IN THE 6-CONNECT FUNCTION
-void marking_exterior(VoxelGrid grid){
+
+//NON-RECURSIVE MARKING EXTERIOR FUNCTION. USES DIFFERENT 6-CONNECT FUNCTION!!
+void marking_exterior(VoxelGrid& grid){
     //marking boundary
     for(int i =0; i < grid.max_x; ++i){
         grid(i,0,0) = 2;
@@ -409,39 +427,29 @@ void marking_exterior(VoxelGrid grid){
 
 //MAIN-----------------------------------------------------------------------------------------------------------------
 int main() {
-    double res = 0.1;
-//    std::string filename = "C:/Users/susan/OneDrive/Documenten/geomatics/GEO1004 3D modelling of the built environment/HW3/IfcOpenHouse_IFC2x3.obj";
-//    std::vector<K::Point_3> normals;
+    double res = 1;
 
-    //file
-//    const char* filename = (argc > 1) ? argv[1] : "C:/Users/susan/OneDrive/Documenten/geomatics/GEO1004 3D modelling of the built environment/HW3/IfcOpenHouse_IFC2x3.obj";
-
-    //Writing to obj
+    //WRITING TO OBJ
     loadObjFile(filename);
 
     //create voxelgrid
-    VoxelGrid grid = create_voxelgrid(points, res);
-//    create_voxelgrid(points,res);
-//    int max_x = grid.max_x;
-//    int max_y = grid.max_y;
-//    int max_z = grid.max_z;
-//    int max_x = VoxelGrid.max_x;
-//    int max_y = grid.max_y;
-//    int max_z = grid.max_z;
-//    std::cout << "grid is made. print max values " << grid.max_x << " and " << grid.max_y << " and "<< grid.max_z << std::endl;
-//    std::cout << "id of point 000 " << grid(0, 0, 0) << std::endl;
+//    VoxelGrid grid = create_voxelgrid(points, res);
+
+    //trying out stuff with POINTERS, this makes the voxelisation run on my computer.
+    double rowx = create_voxelgrid2(points,res)[0];
+    double rowy = create_voxelgrid2(points,res)[1];
+    double rowz = create_voxelgrid2(points,res)[2];
+    VoxelGrid *pointer_vox;
+    VoxelGrid voxels(rowx,rowy,rowz) ;
+    pointer_vox = &voxels;
+
 
     //Voxelisation
-    voxelisation(res, grid);
+    voxelisation(res, voxels);
 //    std::cout << " does this even print "<< std::endl;
     //Marking
     //marking exterior
-    marking_exterior(grid);
-//    std::cout << "grid max " << grid.max_x << std::endl;
-//    std::cout << " okay does this do shit " << vector_six_connect(Point3(0,0,0), max_x, max_y, max_z)[0][0] << std::endl;
-//    marking(Point3(0, 0, 0), 2, grid); //--> thus this would mark the exterior with id 2, doesnt work
-//    std::cout << "exterior marked" << std::endl;
-//    std::cout << " id point exterios" << grid(0,0,0) << std::endl;
+    marking(Point3(0,0,0), 2, voxels);
     //marking rooms
 //    int id_rooms = 3;
 //    for (int i = 0; i < grid.max_x; ++i) { //--> marks rooms with each a different id
@@ -459,7 +467,6 @@ int main() {
 //           }
 //        }
     //end of marking rooms
-    std::cout << "does it reach " << std::endl;
 
     return 0;
 
