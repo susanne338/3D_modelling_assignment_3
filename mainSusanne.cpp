@@ -718,20 +718,20 @@ std::vector<std::vector<Point3>> march_cube(Point3 voxel, VoxelGrid& grid, doubl
     }
 
 
-    Point3 edge_0 = Point3(voxel.x() + 0.5 * res, voxel.y() + res, voxel.z());
-    Point3 edge_1 = Point3(voxel.x() + res, voxel.y() + 0.5 * res, voxel.z());
-    Point3 edge_2 = Point3(voxel.x() + 0.5 * res, voxel.y(), voxel.z());
-    Point3 edge_3 = Point3(voxel.x(), voxel.y() + 0.5 * res, voxel.z());
+    Point3 edge_0 = Point3(voxel.x() + 0.5 , voxel.y() + 1, voxel.z());
+    Point3 edge_1 = Point3(voxel.x() + 1, voxel.y() + 0.5 , voxel.z());
+    Point3 edge_2 = Point3(voxel.x() + 0.5 , voxel.y(), voxel.z());
+    Point3 edge_3 = Point3(voxel.x(), voxel.y() + 0.5 , voxel.z());
 
-    Point3 edge_4 = Point3(voxel.x() + 0.5 * res, voxel.y() + res, voxel.z()+ res);
-    Point3 edge_5 = Point3(voxel.x() + res, voxel.y() + 0.5 * res, voxel.z()+ res);
-    Point3 edge_6 = Point3(voxel.x() + 0.5 * res, voxel.y(), voxel.z()+ res);
-    Point3 edge_7 = Point3(voxel.x() , voxel.y() + 0.5 * res, voxel.z()+  res);
+    Point3 edge_4 = Point3(voxel.x() + 0.5, voxel.y() + 1, voxel.z()+ 1);
+    Point3 edge_5 = Point3(voxel.x() + 1, voxel.y() + 0.5 , voxel.z()+ 1);
+    Point3 edge_6 = Point3(voxel.x() + 0.5 , voxel.y(), voxel.z()+ 1);
+    Point3 edge_7 = Point3(voxel.x() , voxel.y() + 0.5 , voxel.z()+  1);
 
-    Point3 edge_8 = Point3(voxel.x(), voxel.y() + res, voxel.z()+ 0.5 * res);
-    Point3 edge_9 = Point3(voxel.x() + res, voxel.y() + res, voxel.z()+ 0.5 *  res);
-    Point3 edge_10 = Point3(voxel.x() + res, voxel.y(), voxel.z()+ 0.5 *  res);
-    Point3 edge_11 = Point3(voxel.x() , voxel.y(), voxel.z()+ 0.5 *   res);
+    Point3 edge_8 = Point3(voxel.x(), voxel.y() + 1, voxel.z()+ 0.5 );
+    Point3 edge_9 = Point3(voxel.x() + 1, voxel.y() + 1, voxel.z()+ 0.5);
+    Point3 edge_10 = Point3(voxel.x() + 1, voxel.y(), voxel.z()+ 0.5);
+    Point3 edge_11 = Point3(voxel.x() , voxel.y(), voxel.z() + 0.5);
 
     std::vector<Point3> edge_list = {edge_0, edge_1, edge_2, edge_3, edge_4, edge_5, edge_6, edge_7, edge_8, edge_9, edge_10, edge_11};
 
