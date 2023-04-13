@@ -739,9 +739,9 @@ std::vector<std::vector<Point3>> march_cube(Point3 voxel, VoxelGrid& grid, doubl
     std::vector<std::vector<Point3>> triangles;
     for(int i=0; triTable[cubeindex][i] != -1; i+=3){
         std::vector<Point3> triangle;
-        triangle.push_back(edge_list[i]);
-        triangle.push_back(edge_list[i+1]);
-        triangle.push_back(edge_list[i+2]);
+        triangle.push_back(edge_list[triTable[cubeindex][i]]);
+        triangle.push_back(edge_list[triTable[cubeindex][i + 1]]);
+        triangle.push_back(edge_list[triTable[cubeindex][i] + 2]);
         triangles.push_back(triangle);
     }
 return triangles;
@@ -791,7 +791,8 @@ int main() {
 //    std::cout << " does this even print "<< std::endl;
     //Marking
     //marking exterior
-//     marking(Point3(0,0,0), 2, voxels);
+     marking(Point3(0,0,0), 2, grid);
+
     //marking rooms
     int id_rooms = 3;
     for (int i = 0; i < grid.max_x; ++i) { //--> marks rooms with each a different id
