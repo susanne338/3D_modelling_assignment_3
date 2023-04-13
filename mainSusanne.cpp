@@ -741,7 +741,7 @@ std::vector<std::vector<Point3>> march_cube(Point3 voxel, VoxelGrid& grid, doubl
         std::vector<Point3> triangle;
         triangle.push_back(edge_list[triTable[cubeindex][i]]);
         triangle.push_back(edge_list[triTable[cubeindex][i + 1]]);
-        triangle.push_back(edge_list[triTable[cubeindex][i] + 2]);
+        triangle.push_back(edge_list[triTable[cubeindex][i + 2]);
         triangles.push_back(triangle);
     }
 return triangles;
