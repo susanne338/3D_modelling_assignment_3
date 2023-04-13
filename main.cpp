@@ -337,7 +337,7 @@ std::vector<Point3> vector_six_connect(Point3 coordinate, const VoxelGrid& grid)
     vector.push_back(Point3(coordinate.x(), coordinate.y(), coordinate.z()+1));
     std::vector<Point3> new_vector;
     for (auto &p : vector){
-        if (  p.x() >grid.max_x or p.x() < 0 or p.y() > grid.max_y or p.y() < 0 or p.z() > grid.max_z or p.z() < 0){
+        if (  p.x() >grid.max_x-1 or p.x() < 0 or p.y() > grid.max_y-1 or p.y() < 0 or p.z() > grid.max_z-1 or p.z() < 0){
             continue;
         }
         if(grid(p.x(), p.y(), p.z()) != 0){
