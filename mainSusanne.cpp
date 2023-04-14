@@ -24,6 +24,8 @@ typedef CGAL::Polygon_2<K>          Polygon2;
 typedef K::Plane_3                  Plane;
 typedef K::Plane_3                  Plane3;
 typedef K::Line_3                   Line3;
+typedef K::Vector_3                 vector3;
+typedef std::pair<Point3, vector3> pwn;
 //const std::string input_file = Duplex_A_20110907.obj;
 
 std::vector<Point3> points;
@@ -763,6 +765,33 @@ std::vector<std::vector<Point3>> surface_extraction(VoxelGrid& grid, double res,
             }
     return surface;
 }
+std::vector<pwn> poisson_input_point(Point3 voxel, double res){
+    std::vector<pwn> points_surface_poisson;
+    Point3 center = Point3(voxel.x() +1/2*res, voxel.y() + 1/2*res, voxel.z()+1/2*res);
+    double x = center.x();
+    double y = center.y();
+    double z = center.z();
+    Point3 zero(x - 0.5 * res, y, z);
+    vector3 n0 = {-1, 0,0 };
+    points_surface_poisson.push_back(pwn(zero,n0));
+    Point3 one(x, y - 0.5 * res, z);
+    vector3 n1 = {0, -1,0 };
+    points_surface_poisson.push_back(pwn(one, n1));
+    Point3 two(x + 0.5 * res, y, z);
+    vector3 n2 = {1, 0,0 };
+    points_surface_poisson.push_back(pwn(two, n2));
+    Point3 three(x , y +0.5*res, z);
+    vector3 n3 = {0, 1,0 };
+    points_surface_poisson.push_back(pwn(three, n3));
+    Point3 four(x , y, z - 0.5 * res);
+    vector3  n4 = {0, 0, -1 };
+    points_surface_poisson.push_back(pwn(four, n4));
+    Point3 five(x , y , z + 0.5 * res);
+    vector3 n5 = {0, 0, 1};
+    points_surface_poisson.push_back(pwn(five,n5));
+    return points_surface_poisson;
+
+}
 
 //MAIN-----------------------------------------------------------------------------------------------------------------
 int main() {
@@ -820,6 +849,18 @@ int main() {
         room_surfaces.push_back(surface_extraction(grid, res, i));
     }
 
+    std::vector<pwn> surface_pts_poisson;
+    for (int i = 0; i < grid.max_x; ++i) { //--> marks rooms with each a different id
+        for (int j = 0; j < grid.max_y; ++j){
+            for (int k = 0; k < grid.max_z; ++k){
+                if (grid(i,j,k) == 1) {
+                    std::vector<pwn> pts = poisson_input_point(Point3(i,j,k), res);
+                    for (auto& i : pts){
+                        surface_pts_poisson.push_back(i);
+                    }
+                    }
+                }
+                }
 
 
 
