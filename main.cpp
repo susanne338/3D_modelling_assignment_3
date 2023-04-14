@@ -454,7 +454,7 @@ void marking_exterior(VoxelGrid& grid){
      *              ["Building", "BuildingRoom", ...]  -> option: "Building"/"BuildingRoom"
      */
 void write_cityjson(std::string outputfile,
-                    const std::map<int, Point3>& vertices_dict,
+                     std::map<int, Point3>& vertices_dict,
                     const std::vector<std::vector<std::vector<int>>>& markedsurface,
                     const std::vector<std::string>& buildingtype){
 
@@ -467,22 +467,23 @@ void write_cityjson(std::string outputfile,
     json["transform"]["translate"] = nlohmann::json::array({0.0, 0.0, 0.0});
     json["CityObjects"] = nlohmann::json::object();
     json["vertices"] = nlohmann::json::array({});
+    nlohmann::json jvertex;
+    std::cout << "vertex size" << vertices_dict.size() << std::endl;
+    for (int i = 0; i < vertices_dict.size(); i++) {
+        Point3 vertex_pt = vertices_dict[i];
+        jvertex.push_back({vertex_pt.x(), vertex_pt.y(), vertex_pt.z()});
+        json["vertices"].push_back(jvertex);
+        std::cout << i;
+    }
+    std::cout << "vertex done" << std::endl;
 
     for (const auto& type : buildingtype) {
+        std::cout << "472 " << std::endl;
         nlohmann::json surface_array = nlohmann::json::array({});
         for (const auto& eachsurface : markedsurface) {
             nlohmann::json surface;
+            std::cout << "476 " << std::endl;
             for (const auto& tri: eachsurface) {
-                for (const auto& sid: tri) {
-                    surface.push_back(sid);
-                    auto it = vertices_dict.find(sid);
-                    const Point3 vert_pts = it->second;
-                    nlohmann::json jvertex;
-                    jvertex.push_back(vert_pts.x());
-                    jvertex.push_back(vert_pts.y());
-                    jvertex.push_back(vert_pts.z());
-                    json["vertices"].push_back(jvertex);
-                }
                 surface.push_back(eachsurface);
                 surface_array.push_back(surface);
             }
@@ -494,6 +495,7 @@ void write_cityjson(std::string outputfile,
         json["CityObjects"][type]["geometry"]["boundaries"] = nlohmann::json::array();
         json["CityObjects"][type]["geometry"]["boundaries"].push_back(surface_array);
     }
+    std::cout << "surface done" << std::endl;
 
     std::string json_string = json.dump(2);
     std::ofstream out_stream(outputfile);
