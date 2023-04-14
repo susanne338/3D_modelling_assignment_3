@@ -265,18 +265,12 @@ std::map<int, Point3> voxelisation(double res, VoxelGrid& grid) {
                 for (auto faceid: face.vertices) {
                     tri_coo.push_back(points[faceid]);
                 }
-//                std::cout <<"triangle coord: " << tri_coo[0] << "; " << tri_coo[1] << "; " << tri_coo[2] << std::endl;
                 std::vector<double> maxmin_xyz = maxmin_coo(tri_coo);
                 Point3 max_pt(maxmin_xyz[0], maxmin_xyz[2], maxmin_xyz[4]);
                 Point3 max_pt_vox = modelcoo_to_voxcoo(max_pt, points, res);
                 Point3 min_pt(maxmin_xyz[1], maxmin_xyz[3], maxmin_xyz[5]);
                 Point3 min_pt_vox = modelcoo_to_voxcoo(min_pt, points, res);
                 std::vector<Point3> voxel_coordinates;
-//                std::vector<Point3> voxel_intersect;
-//                std::cout << "max pt: " << max_pt << std::endl;
-//                std::cout << "min pt: " << min_pt << std::endl;
-//                std::cout << "max pt voxel: " << max_pt_vox << std::endl;
-//                std::cout << "min pt voxel: " << min_pt_vox << std::endl;
                 int step = 1;
                 Plane3 triangle(tri_coo[0], tri_coo[1], tri_coo[2]);
 
@@ -287,10 +281,9 @@ std::map<int, Point3> voxelisation(double res, VoxelGrid& grid) {
                         int k = int(min_pt_vox.z());
                         while (k <= max_pt_vox.z()) {
                             Point3 vox(i, j, k);
-//                            std::cout << i << " " << j << " " << k << std::endl;
                             voxel_coordinates.push_back(vox);
 
-                            // 26-connectivity
+                            // check intersections
                             // (a) top - down line
                             Point3 a_start(vox.x() + (0.5 ), vox.y() + (0.5 ), vox.z());
                             Point3 a_end(vox.x() + (0.5 ), vox.y() + (0.5 ), vox.z() + res);
@@ -495,17 +488,21 @@ void write_cityjson(std::string outputfile,
         json["CityObjects"][indexj]["geometry"]["type"] = "Solid";
         json["CityObjects"][indexj]["geometry"]["lod"] = "3.0";
         json["CityObjects"][indexj]["geometry"]["boundaries"] = nlohmann::json::array({});
-//        for (const auto& eachsurface : markedsurface) {
         nlohmann::json surface = json::array({});
+        std::vector<std::vector<std::vector<int>>> ssurface;
         for (const auto& tri : markedsurface[j]) {
             nlohmann::json sid;
+            std::vector<std::vector<int>> ssid_d;
+            std::vector<int> ssid;
             for (const auto& id : tri) {
                 sid.push_back(id);
+                ssid.push_back(id);
             }
             surface.push_back(sid);
+            ssid_d.push_back(ssid);
+            ssurface.push_back(ssid_d);
         }
-        surface_array.push_back(surface);
-//        }
+        surface_array.push_back(ssurface);
 
         json["CityObjects"][indexj]["geometry"]["boundaries"].push_back(surface_array);
     }
@@ -517,9 +514,238 @@ void write_cityjson(std::string outputfile,
     out_stream.close();
 }
 
-
-// ******** new
 //ISOSURFACE-----------------------------------------------------------------------------------------------------------
+std::vector<std::vector<Point3>> march_cube(Point3 voxel, VoxelGrid& grid, double res, int id);
+
+
+
+std::map<int, Point3> surface_extraction(VoxelGrid& grid, double res, int id, const std::vector<Point3>& allpoints){
+    std::vector<Point3> surface;
+    std::map<int, Point3> vertex_map;
+    int vid = 0;
+    for(int n = 1; n < grid.max_x -1; ++n){
+        for(int o = 1; o < grid.max_y -1; ++o){
+            for(int p = 1; p < grid.max_z-1; ++p){
+                std::vector<std::vector<Point3>> triangles = march_cube(Point3(n,o,p), grid, res, id);
+                for(auto& triangle: triangles){
+                    Point3 v1 = voxcoo_to_modelcoo(triangle[0], allpoints, res);
+                    Point3 v2 = voxcoo_to_modelcoo(triangle[1], allpoints, res);
+                    Point3 v3 = voxcoo_to_modelcoo(triangle[2], allpoints, res);
+                    vertex_map[vid] = v1;
+                    vertex_map[vid+1] = v2;
+                    vertex_map[vid+2] = v3;
+                    vid = vid +3;
+                }
+            }
+        }
+    }
+    std::cout << "surface size: " << vertex_map.size() << std::endl;
+    return vertex_map;
+}
+
+std::vector<std::vector<int>> compute_surface(VoxelGrid& grid, double res, int id, const std::vector<Point3>& allpoints) {
+    std::map<int, Point3> vertexmap = surface_extraction(grid, res, id, allpoints);
+    std::vector<std::vector<int>> surface;
+    for (int i = 0; i < vertexmap.size(); i=i+3) {
+        std::vector<int> triangle;
+        triangle.push_back(i);
+        triangle.push_back(i+1);
+        triangle.push_back(i+2);
+        surface.push_back(triangle);
+    }
+    return surface;
+}
+
+
+std::vector<pwn> poisson_input_point(std::vector<pwn> pwnthing, Point3 voxel, double res){
+    std::vector<pwn> points_surface_poisson;
+    Point3 center = Point3(voxel.x() +1/2*res, voxel.y() + 1/2*res, voxel.z()+1/2*res);
+    double x = center.x();
+    double y = center.y();
+    double z = center.z();
+    Point3 zero(x - 0.5 * res, y, z);
+    vector3 n0 = {-1, 0,0 };
+    pwnthing.push_back(pwn(zero,n0));
+    Point3 one(x, y - 0.5 * res, z);
+    vector3 n1 = {0, -1,0 };
+    pwnthing.push_back(pwn(one, n1));
+    Point3 two(x + 0.5 * res, y, z);
+    vector3 n2 = {1, 0,0 };
+    pwnthing.push_back(pwn(two, n2));
+    Point3 three(x , y +0.5*res, z);
+    vector3 n3 = {0, 1,0 };
+    pwnthing.push_back(pwn(three, n3));
+    Point3 four(x , y, z - 0.5 * res);
+    vector3  n4 = {0, 0, -1 };
+    pwnthing.push_back(pwn(four, n4));
+    Point3 five(x , y , z + 0.5 * res);
+    vector3 n5 = {0, 0, 1};
+    pwnthing.push_back(pwn(five,n5));
+    return pwnthing;
+}
+
+
+
+
+void write_toobj(std::string filename, std::vector<std::vector<std::vector<int>>> allsurface, std::map<int, Point3> vertexdict) {
+    std::ofstream output_stream;
+    output_stream.open(filename, std::fstream::app);
+    int i = 1;
+    for (auto & surface : allsurface) {
+        for (auto & tri : surface) {
+            for (auto & vertex : tri) {
+                Point3 vertcoo = vertexdict[vertex];
+                output_stream << "v " << vertcoo.x() << " " << vertcoo.y() <<" "<< vertcoo.z() << "\n";
+            }
+            output_stream << "f " << i << " " << i+1 << " " << i+2 << "\n";
+            i = i +3;
+        }
+    }
+}
+
+
+//MAIN-----------------------------------------------------------------------------------------------------------------
+int main(int argc, const char * argv[]) {
+    double res = 1.0;
+
+    //file
+    const std::string filename = "Duplex_A_20110907_nofurni.obj";
+
+    //Writing to obj
+    loadObjFile(filename);
+
+    //create voxelgrid
+    VoxelGrid grid = create_voxelgrid(points, res);
+    std::cout << "max x: " << grid.max_x << std::endl;
+    std::cout << "max y: " << grid.max_y << std::endl;
+    std::cout << "max z: " << grid.max_z << std::endl;
+
+
+    //Voxelisation
+    voxelisation(res, grid); // this also returns vertex dictionary
+
+    //Marking
+    //marking exterior
+    marking(Point3(0, 0, 0), 2, grid); //--> thus this would mark the exterior with id 2
+    std::cout << "exterior marked" << std::endl;
+    //marking rooms
+    int id_rooms = 3;
+    int voxels_with_1 = 0;
+    int voxels_with_2 = 0;
+    int voxels_with_3 = 0;
+    for (int i = 0; i < grid.max_x; ++i) { //--> marks rooms with each a different id
+        for (int j = 0; j < grid.max_y; ++j){
+            for (int k = 0; k < grid.max_z; ++k){
+                if (grid(i,j,k) == 0) {
+                    marking(Point3(i, j, k), id_rooms, grid);
+                    id_rooms++;
+                }
+                else {
+                    continue;
+                }
+
+            }
+        }
+    }
+    // calculate voxels
+    for (int i = 0; i < grid.max_x; ++i) { //--> marks rooms with each a different id
+        for (int j = 0; j < grid.max_y; ++j) {
+            for (int k = 0; k < grid.max_z; ++k) {
+                if (grid(i, j, k) == 1) {
+                    voxels_with_1++;
+                }
+                if (grid(i, j, k) == 2) {
+                    voxels_with_2++;
+                }
+                if (grid(i, j, k) == 3) {
+                    voxels_with_3++;
+                }
+            }
+        }
+    }
+
+    std::cout << "num of voxels marked with 1: " << voxels_with_1 << std::endl;
+    std::cout << "num of voxels marked with 2: " << voxels_with_2 << std::endl;
+    std::cout << "num of voxels marked with 3: " << voxels_with_3 << std::endl;
+    std::cout << "number of rooms" << id_rooms - 3 << std::endl;
+
+//    //end of marking rooms
+    std::cout << "rooms marked" << std::endl;
+    //SURFACE
+    //outer envelope
+    //gives a vector consisting of triangles with each 3 points
+    std::vector<std::vector<int>> surface_outer = compute_surface(grid, res, 2, points);
+    // convert point3 to id
+    std::vector<std::vector<std::vector<int>>> allsurface;
+    std::map<int, Point3> vertexdict = surface_extraction(grid, res, 2, points);
+    // create list of building type
+    std::vector<std::string> buildingtype = {"Building"};
+    allsurface.push_back(surface_outer);
+
+    //rooms
+    //i is the room number.
+    std::vector<std::vector<std::vector<int>>> room_surfaces;
+    for (int i = 3; i <= id_rooms; ++i){
+        room_surfaces.push_back(compute_surface(grid, res, i, points));
+    }
+    std::cout << "surface extracted " << std::endl;
+
+    for (auto const& room_sur : room_surfaces) {
+        std::vector<std::vector<int>> room_surfaces_ids;
+        // result: room surface 1 = [ [1, 2, 3, ...], [4, 5, 6, 7, ...] ]
+        for (auto & room_id : room_sur) {
+            room_surfaces_ids.push_back(room_id);
+        }
+        allsurface.push_back(room_surfaces_ids);
+        buildingtype.push_back("BuildingRoom");
+    }
+
+    // a whole list of surface ids
+
+    std::cout << "building type list size: " << buildingtype.size() << std::endl;
+    std::cout << "surface id list size: " << allsurface.size() << std::endl;
+
+    const std::string outputfile = "output.city.json";
+    const std::string outputobj = "output4.obj";
+    write_cityjson(outputfile, vertexdict, allsurface, buildingtype);
+    std::cout << "cityjson done" << std::endl;
+    write_toobj(outputobj, allsurface, vertexdict);
+    std::cout << "obj done" << std::endl;
+
+    // trying the poisson surface reconstruction --------------------------------------------------
+//    std::vector<pwn> surface_pts_poisson;
+//    for (int i = 0; i < grid.max_x; ++i) { //--> marks rooms with each a different id
+//        for (int j = 0; j < grid.max_y; ++j){
+//            for (int k = 0; k < grid.max_z; ++k){
+//                if (grid(i,j,k) == 1) {
+//                    surface_pts_poisson = poisson_input_point(surface_pts_poisson, Point3(i,j,k), res);
+//
+//                    }
+//                }
+//            }
+//        }
+//
+//        Polyhedron  output_mesh;
+//        double average_spacing = CGAL::compute_average_spacing<CGAL::Sequential_tag>
+//                (surface_pts_poisson, 6, CGAL::parameters::point_map(CGAL::First_of_pair_property_map<pwn>()));
+//        if (CGAL::poisson_surface_reconstruction_delaunay
+//                (surface_pts_poisson.begin(), surface_pts_poisson.end(),
+//                 CGAL::First_of_pair_property_map<pwn>(),
+//                 CGAL::Second_of_pair_property_map<pwn>(),
+//                 output_mesh, average_spacing))
+//        {
+//            std::ofstream out("surface_poisson.off");
+//            out << output_mesh;
+//        }
+//        else
+//            return EXIT_FAILURE;
+//        return EXIT_SUCCESS;
+    // -------------------------------------------------------------------------------------------
+
+        return 0;
+}
+
+
 int triTable[256][16] =
         {{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},
          {0, 8, 3, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1},
@@ -842,287 +1068,4 @@ std::vector<std::vector<Point3>> march_cube(Point3 voxel, VoxelGrid& grid, doubl
     }
     return triangles;
 }
-
-std::map<int, Point3> surface_extraction(VoxelGrid& grid, double res, int id, const std::vector<Point3>& allpoints){
-    std::vector<Point3> surface;
-    std::map<int, Point3> vertex_map;
-    int vid = 0;
-    for(int n = 1; n < grid.max_x -1; ++n){
-        for(int o = 1; o < grid.max_y -1; ++o){
-            for(int p = 1; p < grid.max_z-1; ++p){
-                std::vector<std::vector<Point3>> triangles = march_cube(Point3(n,o,p), grid, res, id);
-                for(auto& triangle: triangles){
-                    Point3 v1 = voxcoo_to_modelcoo(triangle[0], allpoints, res);
-                    Point3 v2 = voxcoo_to_modelcoo(triangle[1], allpoints, res);
-                    Point3 v3 = voxcoo_to_modelcoo(triangle[2], allpoints, res);
-                    vertex_map[vid] = v1;
-                    vertex_map[vid+1] = v2;
-                    vertex_map[vid+2] = v3;
-                    vid = vid +3;
-                }
-            }
-        }
-    }
-    std::cout << "surface size: " << vertex_map.size() << std::endl;
-    return vertex_map;
-}
-
-std::vector<std::vector<int>> compute_surface(VoxelGrid& grid, double res, int id, const std::vector<Point3>& allpoints) {
-    std::map<int, Point3> vertexmap = surface_extraction(grid, res, id, allpoints);
-    std::vector<std::vector<int>> surface;
-    for (int i = 0; i < vertexmap.size(); i=i+3) {
-        std::vector<int> triangle;
-        triangle.push_back(i);
-        triangle.push_back(i+1);
-        triangle.push_back(i+2);
-        surface.push_back(triangle);
-    }
-    return surface;
-}
-
-
-std::vector<std::vector<int>> to_surface_ids (const std::vector<std::vector<Point3>>& surface_ext,
-                                           std::map<int, Point3>& vertices_dict) {
-    std::vector<std::vector<int>> surface_ids;
-    for (auto const& tri : surface_ext) {
-        std::vector<int> triangeids;
-        for (auto const& vertex : tri) {
-            for (auto const& [vid, point] : vertices_dict) {
-                if (point == vertex) {
-                    triangeids.push_back(vid);
-                }
-            }
-        }
-        surface_ids.push_back(triangeids);
-    }
-    return surface_ids;
-}
-
-// ********** end
-
-std::vector<pwn> poisson_input_point(std::vector<pwn> pwnthing, Point3 voxel, double res){
-    std::vector<pwn> points_surface_poisson;
-    Point3 center = Point3(voxel.x() +1/2*res, voxel.y() + 1/2*res, voxel.z()+1/2*res);
-    double x = center.x();
-    double y = center.y();
-    double z = center.z();
-    Point3 zero(x - 0.5 * res, y, z);
-    vector3 n0 = {-1, 0,0 };
-    pwnthing.push_back(pwn(zero,n0));
-    Point3 one(x, y - 0.5 * res, z);
-    vector3 n1 = {0, -1,0 };
-    pwnthing.push_back(pwn(one, n1));
-    Point3 two(x + 0.5 * res, y, z);
-    vector3 n2 = {1, 0,0 };
-    pwnthing.push_back(pwn(two, n2));
-    Point3 three(x , y +0.5*res, z);
-    vector3 n3 = {0, 1,0 };
-    pwnthing.push_back(pwn(three, n3));
-    Point3 four(x , y, z - 0.5 * res);
-    vector3  n4 = {0, 0, -1 };
-    pwnthing.push_back(pwn(four, n4));
-    Point3 five(x , y , z + 0.5 * res);
-    vector3 n5 = {0, 0, 1};
-    pwnthing.push_back(pwn(five,n5));
-    return pwnthing;
-}
-
-
-
-
-void write_toobj(std::string filename, std::vector<std::vector<std::vector<int>>> allsurface, std::map<int, Point3> vertexdict) {
-    std::ofstream output_stream;
-    output_stream.open(filename, std::fstream::app);
-    int i = 1;
-    for (auto & surface : allsurface) {
-        for (auto & tri : surface) {
-            for (auto & vertex : tri) {
-                Point3 vertcoo = vertexdict[vertex];
-                output_stream << "v " << vertcoo.x() << " " << vertcoo.y() <<" "<< vertcoo.z() << "\n";
-            }
-            output_stream << "f " << i << " " << i+1 << " " << i+2 << "\n";
-            i = i +3;
-        }
-    }
-}
-
-
-//MAIN-----------------------------------------------------------------------------------------------------------------
-int main(int argc, const char * argv[]) {
-    double res = 1.0;
-
-    //file
-    const char* filename = (argc > 1) ? argv[1] : "/Users/putiriyadi/Documents/TU/q3/3d/hw03/Duplex_A_20110907_nofurni.obj";
-
-    //Writing to obj
-    loadObjFile(filename);
-
-
-// -------------------new
-    //trying out stuff with POINTERS, this makes the voxelisation run on my computer.
-//    double rowx = create_voxelgrid2(points,res)[0];
-//    double rowy = create_voxelgrid2(points,res)[1];
-//    double rowz = create_voxelgrid2(points,res)[2];
-//    VoxelGrid *pointer_vox;
-//    VoxelGrid voxels(rowx,rowy,rowz) ;
-//    pointer_vox = &voxels;
-//
-//
-//    //Voxelisation
-//    voxelisation(res, voxels);
-//
-//    //Marking
-//    //marking exterior
-//    marking(Point3(0,0,0), 2, voxels);
-// -------------------end of new
-
-    //create voxelgrid
-    VoxelGrid grid = create_voxelgrid(points, res);
-    std::cout << "max x: " << grid.max_x << std::endl;
-    std::cout << "max y: " << grid.max_y << std::endl;
-    std::cout << "max z: " << grid.max_z << std::endl;
-
-
-    //Voxelisation
-    voxelisation(res, grid); // this also returns vertex dictionary
-
-//    marking_exterior(grid);
-//    std::cout <<"vector six func: " << vector_six_connect(Point3(0, 0, 0), grid)[0][0] << std::endl;
-
-    //Marking
-    //marking exterior
-    marking(Point3(0, 0, 0), 2, grid); //--> thus this would mark the exterior with id 2, doesnt work
-    std::cout << "exterior marked" << std::endl;
-    //marking rooms
-    int id_rooms = 3;
-    int voxels_with_1 = 0;
-    int voxels_with_2 = 0;
-    int voxels_with_3 = 0;
-    for (int i = 0; i < grid.max_x; ++i) { //--> marks rooms with each a different id
-        for (int j = 0; j < grid.max_y; ++j){
-            for (int k = 0; k < grid.max_z; ++k){
-                if (grid(i,j,k) == 0) {
-                    marking(Point3(i, j, k), id_rooms, grid);
-                    id_rooms++;
-                }
-                else {
-                    continue;
-                }
-
-            }
-        }
-    }
-    // calculate voxels
-    for (int i = 0; i < grid.max_x; ++i) { //--> marks rooms with each a different id
-        for (int j = 0; j < grid.max_y; ++j) {
-            for (int k = 0; k < grid.max_z; ++k) {
-                if (grid(i, j, k) == 1) {
-                    voxels_with_1++;
-                }
-                if (grid(i, j, k) == 2) {
-                    voxels_with_2++;
-                }
-                if (grid(i, j, k) == 3) {
-                    voxels_with_3++;
-                }
-            }
-        }
-    }
-
-    std::cout << "num of voxels marked with 1: " << voxels_with_1 << std::endl;
-    std::cout << "num of voxels marked with 2: " << voxels_with_2 << std::endl;
-    std::cout << "num of voxels marked with 3: " << voxels_with_3 << std::endl;
-    std::cout << "number of rooms" << id_rooms - 3 << std::endl;
-
-//    //end of marking rooms
-    std::cout << "rooms marked" << std::endl;
-    //SURFACE
-    //outer envelope
-    //gives a vector consisting of triangles with each 3 points
-    std::vector<std::vector<int>> surface_outer = compute_surface(grid, res, 2, points);
-    // convert point3 to id
-    std::vector<std::vector<std::vector<int>>> allsurface;
-    std::map<int, Point3> vertexdict = surface_extraction(grid, res, 2, points);
-//    std::vector<std::vector<int>> surface_ids = to_surface_ids(surface_outer, vertexdict);
-    // create list of building type
-    std::vector<std::string> buildingtype = {"Building"};
-//    for (int it = 0; it < surface_ids.size(); it++) {
-//        buildingtype.push_back("Building");
-//    }
-    allsurface.push_back(surface_outer);
-
-    //rooms
-    //i is the room number.
-    std::vector<std::vector<std::vector<int>>> room_surfaces;
-    for (int i = 3; i <= id_rooms; ++i){
-        room_surfaces.push_back(compute_surface(grid, res, i, points));
-    }
-    std::cout << "surface extracted " << std::endl;
-
-    for (auto const& room_sur : room_surfaces) {
-        std::vector<std::vector<int>> room_surfaces_ids;
-        // result: room surface 1 = [ [1, 2, 3, ...], [4, 5, 6, 7, ...] ]
-        for (auto & room_id : room_sur) {
-            room_surfaces_ids.push_back(room_id);
-        }
-        allsurface.push_back(room_surfaces_ids);
-        buildingtype.push_back("BuildingRoom");
-    }
-
-    // a whole list of surface ids
-
-    std::cout << "building type list size: " << buildingtype.size() << std::endl;
-    std::cout << "surface id list size: " << allsurface.size() << std::endl;
-
-    /* write cityjson
-     * void write_cityjson(std::string outputfile,
-                    std::map<int, Point3>& vertices_dict,
-                    std::vector<std::vector<std::vector<int>>>& markedsurface,
-                    std::vector<std::string> buildingtype){
-     */
-    const std::string outputfile = "output.city.json";
-    const std::string outputobj = "output3.obj";
-    write_cityjson(outputfile, vertexdict, allsurface, buildingtype);
-    std::cout << "cityjson done" << std::endl;
-    write_toobj(outputobj, allsurface, vertexdict);
-    std::cout << "obj done" << std::endl;
-
-    // trying the new surface reconstruction --------------------------------------------------
-//    std::vector<pwn> surface_pts_poisson;
-//    for (int i = 0; i < grid.max_x; ++i) { //--> marks rooms with each a different id
-//        for (int j = 0; j < grid.max_y; ++j){
-//            for (int k = 0; k < grid.max_z; ++k){
-//                if (grid(i,j,k) == 1) {
-//                    surface_pts_poisson = poisson_input_point(surface_pts_poisson, Point3(i,j,k), res);
-//
-//                    }
-//                }
-//            }
-//        }
-//
-//        Polyhedron  output_mesh;
-//        double average_spacing = CGAL::compute_average_spacing<CGAL::Sequential_tag>
-//                (surface_pts_poisson, 6, CGAL::parameters::point_map(CGAL::First_of_pair_property_map<pwn>()));
-//        if (CGAL::poisson_surface_reconstruction_delaunay
-//                (surface_pts_poisson.begin(), surface_pts_poisson.end(),
-//                 CGAL::First_of_pair_property_map<pwn>(),
-//                 CGAL::Second_of_pair_property_map<pwn>(),
-//                 output_mesh, average_spacing))
-//        {
-//            std::ofstream out("surface_poisson.off");
-//            out << output_mesh;
-//        }
-//        else
-//            return EXIT_FAILURE;
-//        return EXIT_SUCCESS;
-    // -------------------------------------------------------------------------------------------
-
-
-
-        return 0;
-
-
-}
-
-
 
