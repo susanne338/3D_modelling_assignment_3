@@ -467,30 +467,32 @@ void write_cityjson(std::string outputfile,
     json["transform"]["translate"] = nlohmann::json::array({0.0, 0.0, 0.0});
     json["CityObjects"] = nlohmann::json::object();
     json["vertices"] = nlohmann::json::array({});
-    nlohmann::json jvertex;
+//    nlohmann::json jvertex;
     std::cout << "vertex size" << vertices_dict.size() << std::endl;
     for (int i = 0; i < vertices_dict.size(); i++) {
+        nlohmann::json jvertex;
         Point3 vertex_pt = vertices_dict[i];
-        jvertex.push_back({vertex_pt.x(), vertex_pt.y(), vertex_pt.z()});
+        jvertex.push_back(vertex_pt.x());
+        jvertex.push_back(vertex_pt.y());
+        jvertex.push_back(vertex_pt.z());
         json["vertices"].push_back(jvertex);
         std::cout << i << " ";
     }
     std::cout << "vertex done" << std::endl;
 
     for (const auto& type : buildingtype) {
-        std::cout << "472 " << std::endl;
         nlohmann::json surface_array = nlohmann::json::array({});
-        for (const auto& eachsurface : markedsurface) {
-            nlohmann::json surface;
-            std::cout << "476 " << std::endl;
-            surface.push_back(eachsurface);
-            surface_array.push_back(surface);
-        }
         json["CityObjects"][type] = nlohmann::json::object();
         json["CityObjects"][type]["type"] = "Solid";
         json["CityObjects"][type]["geometry"] = nlohmann::json::object();
         json["CityObjects"][type]["geometry"]["type"] = "MultiSurface";
         json["CityObjects"][type]["geometry"]["boundaries"] = nlohmann::json::array();
+        for (const auto& eachsurface : markedsurface) {
+            nlohmann::json surface;
+            surface.push_back(eachsurface);
+            surface_array.push_back(surface);
+        }
+
         json["CityObjects"][type]["geometry"]["boundaries"].push_back(surface_array);
     }
     std::cout << "surface done" << std::endl;
@@ -837,8 +839,8 @@ std::map<int, Point3> surface_extraction(VoxelGrid& grid, double res, int id, co
                 std::vector<std::vector<Point3>> triangles = march_cube(Point3(n,o,p), grid, res, id);
                 for(auto& triangle: triangles){
                     Point3 v1 = voxcoo_to_modelcoo(triangle[0], allpoints, res);
-                    Point3 v2 = triangle[1];
-                    Point3 v3 = triangle[2];
+                    Point3 v2 = voxcoo_to_modelcoo(triangle[1], allpoints, res);
+                    Point3 v3 = voxcoo_to_modelcoo(triangle[2], allpoints, res);
                     vertex_map[vid] = v1;
                     vertex_map[vid+1] = v2;
                     vertex_map[vid+2] = v3;
@@ -883,7 +885,21 @@ std::vector<std::vector<int>> to_surface_ids (const std::vector<std::vector<Poin
 }
 
 // ********** end
-
+void write_toobj(std::string filename, std::vector<std::vector<std::vector<int>>> allsurface, std::map<int, Point3> vertexdict) {
+    std::ofstream output_stream;
+    output_stream.open(filename, std::fstream::app);
+    int i = 1;
+    for (auto & surface : allsurface) {
+        for (auto & tri : surface) {
+            for (auto & vertex : tri) {
+                Point3 vertcoo = vertexdict[vertex];
+                output_stream << "v " << vertcoo.x() << " " << vertcoo.y() <<" "<< vertcoo.z() << "\n";
+            }
+            output_stream << "f " << i << " " << i+1 << " " << i+2 << "\n";
+            i = i +3;
+        }
+    }
+}
 
 
 //MAIN-----------------------------------------------------------------------------------------------------------------
@@ -1020,8 +1036,11 @@ int main(int argc, const char * argv[]) {
                     std::vector<std::string> buildingtype){
      */
     const std::string outputfile = "output.city.json";
-    write_cityjson("output.city.json", vertexdict, allsurface, buildingtype);
+    const std::string outputobj = "output.obj";
+    write_cityjson(outputfile, vertexdict, allsurface, buildingtype);
     std::cout << "cityjson done" << std::endl;
+    write_toobj(outputobj, allsurface, vertexdict);
+    std::cout << "obj done" << std::endl;
 
     return 0;
 
