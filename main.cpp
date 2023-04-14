@@ -16,6 +16,9 @@
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Polygon_mesh_processing/repair_polygon_soup.h>
 #include <CGAL/Polygon_mesh_processing/connected_components.h>
+#include <CGAL/Polyhedron_3.h>
+#include <CGAL/poisson_surface_reconstruction.h>
+#include <CGAL/IO/read_points.h>
 #include "json.hpp"
 using json = nlohmann::json;
 
@@ -23,9 +26,11 @@ typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
 
 typedef K::Point_2                  Point2;
 typedef K::Point_3                  Point3;
-typedef CGAL::Polygon_2<K>          Polygon2;
 typedef K::Plane_3                  Plane3;
 typedef K::Line_3                   Line3;
+typedef K::Vector_3                 vector3;
+typedef std::pair<Point3, vector3>  pwn;
+typedef CGAL::Polyhedron_3<K> Polyhedron;
 //const std::string input_file = Duplex_A_20110907.obj;
 
 
@@ -482,11 +487,11 @@ void write_cityjson(std::string outputfile,
 
     for (const auto& type : buildingtype) {
         nlohmann::json surface_array = nlohmann::json::array({});
-        json["CityObjects"][type] = nlohmann::json::object();
-        json["CityObjects"][type]["type"] = "Solid";
-        json["CityObjects"][type]["geometry"] = nlohmann::json::object();
-        json["CityObjects"][type]["geometry"]["type"] = "MultiSurface";
-        json["CityObjects"][type]["geometry"]["boundaries"] = nlohmann::json::array();
+        json["CityObjects"]["Building"] = nlohmann::json::object();
+        json["CityObjects"]["Building"]["type"] = type;
+        json["CityObjects"]["Building"]["geometry"] = nlohmann::json::object();
+        json["CityObjects"]["Building"]["geometry"][0]["type"] = "Solid";
+        json["CityObjects"]["Building"]["geometry"][0]["boundaries"] = nlohmann::json::array();
         for (const auto& eachsurface : markedsurface) {
             nlohmann::json surface;
             surface.push_back(eachsurface);
@@ -885,6 +890,37 @@ std::vector<std::vector<int>> to_surface_ids (const std::vector<std::vector<Poin
 }
 
 // ********** end
+
+std::vector<pwn> poisson_input_point(std::vector<pwn> pwnthing, Point3 voxel, double res){
+    std::vector<pwn> points_surface_poisson;
+    Point3 center = Point3(voxel.x() +1/2*res, voxel.y() + 1/2*res, voxel.z()+1/2*res);
+    double x = center.x();
+    double y = center.y();
+    double z = center.z();
+    Point3 zero(x - 0.5 * res, y, z);
+    vector3 n0 = {-1, 0,0 };
+    pwnthing.push_back(pwn(zero,n0));
+    Point3 one(x, y - 0.5 * res, z);
+    vector3 n1 = {0, -1,0 };
+    pwnthing.push_back(pwn(one, n1));
+    Point3 two(x + 0.5 * res, y, z);
+    vector3 n2 = {1, 0,0 };
+    pwnthing.push_back(pwn(two, n2));
+    Point3 three(x , y +0.5*res, z);
+    vector3 n3 = {0, 1,0 };
+    pwnthing.push_back(pwn(three, n3));
+    Point3 four(x , y, z - 0.5 * res);
+    vector3  n4 = {0, 0, -1 };
+    pwnthing.push_back(pwn(four, n4));
+    Point3 five(x , y , z + 0.5 * res);
+    vector3 n5 = {0, 0, 1};
+    pwnthing.push_back(pwn(five,n5));
+    return pwnthing;
+}
+
+
+
+
 void write_toobj(std::string filename, std::vector<std::vector<std::vector<int>>> allsurface, std::map<int, Point3> vertexdict) {
     std::ofstream output_stream;
     output_stream.open(filename, std::fstream::app);
@@ -1042,7 +1078,39 @@ int main(int argc, const char * argv[]) {
     write_toobj(outputobj, allsurface, vertexdict);
     std::cout << "obj done" << std::endl;
 
-    return 0;
+    // trying the new surface reconstruction --------------------------------------------------
+//    std::vector<pwn> surface_pts_poisson;
+//    for (int i = 0; i < grid.max_x; ++i) { //--> marks rooms with each a different id
+//        for (int j = 0; j < grid.max_y; ++j){
+//            for (int k = 0; k < grid.max_z; ++k){
+//                if (grid(i,j,k) == 1) {
+//                    surface_pts_poisson = poisson_input_point(surface_pts_poisson, Point3(i,j,k), res);
+//
+//                    }
+//                }
+//            }
+//        }
+//
+//        Polyhedron  output_mesh;
+//        double average_spacing = CGAL::compute_average_spacing<CGAL::Sequential_tag>
+//                (surface_pts_poisson, 6, CGAL::parameters::point_map(CGAL::First_of_pair_property_map<pwn>()));
+//        if (CGAL::poisson_surface_reconstruction_delaunay
+//                (surface_pts_poisson.begin(), surface_pts_poisson.end(),
+//                 CGAL::First_of_pair_property_map<pwn>(),
+//                 CGAL::Second_of_pair_property_map<pwn>(),
+//                 output_mesh, average_spacing))
+//        {
+//            std::ofstream out("surface_poisson.off");
+//            out << output_mesh;
+//        }
+//        else
+//            return EXIT_FAILURE;
+//        return EXIT_SUCCESS;
+    // -------------------------------------------------------------------------------------------
+
+
+
+        return 0;
 
 
 }
