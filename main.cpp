@@ -241,9 +241,9 @@ Point3 modelcoo_to_voxcoo(Point3 point, const std::vector<Point3>& allpoints, do
 
 Point3 voxcoo_to_modelcoo(Point3 point, const std::vector<Point3>& allpoints, double res){
     std::vector<double> maxminlist = maxmin_coo(allpoints);
-    double x = (maxminlist[1] - res) + (point[0] * res);
-    double y = (maxminlist[3] - res) + (point[0] * res);
-    double z = (maxminlist[5] - res) + (point[0] * res);
+    double x = ((maxminlist[1] - res) + point.x()) * res;
+    double y = ((maxminlist[3] - res) + point.y()) * res;
+    double z = ((maxminlist[5] - res) + point.z()) * res;
     //Gives minimum coordinate of the voxel
     return {x, y, z};
 
@@ -485,20 +485,29 @@ void write_cityjson(std::string outputfile,
     }
     std::cout << "vertex done" << std::endl;
 
-    for (const auto& type : buildingtype) {
+    for (int j = 0; j < buildingtype.size(); j++){
         nlohmann::json surface_array = nlohmann::json::array({});
-        json["CityObjects"]["Building"] = nlohmann::json::object();
-        json["CityObjects"]["Building"]["type"] = type;
-        json["CityObjects"]["Building"]["geometry"] = nlohmann::json::object();
-        json["CityObjects"]["Building"]["geometry"][0]["type"] = "Solid";
-        json["CityObjects"]["Building"]["geometry"][0]["boundaries"] = nlohmann::json::array();
-        for (const auto& eachsurface : markedsurface) {
-            nlohmann::json surface;
-            surface.push_back(eachsurface);
-            surface_array.push_back(surface);
+        std::string indexj = std::to_string(j);
+        std::string buildingtypej = buildingtype[j];
+        json["CityObjects"][indexj] = nlohmann::json::object();
+        json["CityObjects"][indexj]["type"] = buildingtypej;
+        json["CityObjects"][indexj]["geometry"] = nlohmann::json::object();
+        json["CityObjects"][indexj]["geometry"]["type"] = "Solid";
+        json["CityObjects"][indexj]["geometry"]["lod"] = "3.0";
+        json["CityObjects"][indexj]["geometry"]["boundaries"] = nlohmann::json::array({});
+//        for (const auto& eachsurface : markedsurface) {
+        nlohmann::json surface = json::array({});
+        for (const auto& tri : markedsurface[j]) {
+            nlohmann::json sid;
+            for (const auto& id : tri) {
+                sid.push_back(id);
+            }
+            surface.push_back(sid);
         }
+        surface_array.push_back(surface);
+//        }
 
-        json["CityObjects"][type]["geometry"]["boundaries"].push_back(surface_array);
+        json["CityObjects"][indexj]["geometry"]["boundaries"].push_back(surface_array);
     }
     std::cout << "surface done" << std::endl;
 
@@ -1072,7 +1081,7 @@ int main(int argc, const char * argv[]) {
                     std::vector<std::string> buildingtype){
      */
     const std::string outputfile = "output.city.json";
-    const std::string outputobj = "output.obj";
+    const std::string outputobj = "output3.obj";
     write_cityjson(outputfile, vertexdict, allsurface, buildingtype);
     std::cout << "cityjson done" << std::endl;
     write_toobj(outputobj, allsurface, vertexdict);
