@@ -811,7 +811,7 @@ int main() {
     //SURFACE
     //outer envelope
     //gives a vector consisting of triangles with each 3 points
-    std::vector<std::vector<Point3>> surface_outer = surface_extraction(grid, res, 1);
+    std::vector<std::vector<Point3>> surface_outer = surface_extraction(grid, res, 2);
 
     //rooms
     //i is the room number.
