@@ -245,7 +245,7 @@ Point3 voxcoo_to_modelcoo(Point3 point, const std::vector<Point3>& allpoints, do
 }
 
 //VOXELISATION---------------------------------------------------------------------------------------------------------
-int voxelisation(double res, VoxelGrid& grid) {
+std::map<int, Point3> voxelisation(double res, VoxelGrid& grid) {
     std::cout << "size of object, shell: " << objects.size() << std::endl;
     std::map<int, Point3> vertices_dict;
     int vid = 0;
@@ -322,7 +322,7 @@ int voxelisation(double res, VoxelGrid& grid) {
             std::vector<Point3> coo_list_intersect;
         }
     }
-    return 0;
+    return vertices_dict;
 }
 
 
@@ -445,18 +445,18 @@ void marking_exterior(VoxelGrid& grid){
 
 
 //WRITE CITYJSON--------------------------------------------------------------------------------------------------------
-void write_cityjson(std::string outputfile,
-                    std::map<int, Point3>& vertices_dict,
-                    std::vector<std::vector<int>>& markedsurface,
-                    std::vector<std::string> buildingtype){
     /*
      * input:   vertex dictionary
      *              {id -> Point3}
      *          nested list of marked surface
-     *              [[1, 2, 3, 4, 5], [3, 4, 5, 6] ...]
+     *              [ [ [1, 2, 3], [4, 5, 6], ...], [ [10, 11, 12], [13, 14, 15] ...], ... ]
      *          list of building type which its position refers to the marked surface list
      *              ["Building", "BuildingRoom", ...]  -> option: "Building"/"BuildingRoom"
      */
+void write_cityjson(std::string outputfile,
+                    const std::map<int, Point3>& vertices_dict,
+                    const std::vector<std::vector<std::vector<int>>>& markedsurface,
+                    const std::vector<std::string>& buildingtype){
 
     std::vector<Point3> vertices_all;
     nlohmann::json json;
@@ -466,22 +466,26 @@ void write_cityjson(std::string outputfile,
     json["transform"]["scale"] = nlohmann::json::array({1.0, 1.0, 1.0});
     json["transform"]["translate"] = nlohmann::json::array({0.0, 0.0, 0.0});
     json["CityObjects"] = nlohmann::json::object();
+    json["vertices"] = nlohmann::json::array({});
 
-    for (auto& type : buildingtype) {
-        json["vertices"] = nlohmann::json::array({});
+    for (const auto& type : buildingtype) {
         nlohmann::json surface_array = nlohmann::json::array({});
-        for (auto& eachsurface : markedsurface) {
+        for (const auto& eachsurface : markedsurface) {
             nlohmann::json surface;
-            for (auto sid : eachsurface) {
-                surface.push_back(sid);
-                Point3 vert_pts = vertices_dict[sid];
-                nlohmann::json jvertex;
-                jvertex.push_back(vert_pts.x());
-                jvertex.push_back(vert_pts.y());
-                jvertex.push_back(vert_pts.z());
-                json["vertices"].push_back(jvertex);
+            for (const auto& tri: eachsurface) {
+                for (const auto& sid: tri) {
+                    surface.push_back(sid);
+                    auto it = vertices_dict.find(sid);
+                    const Point3 vert_pts = it->second;
+                    nlohmann::json jvertex;
+                    jvertex.push_back(vert_pts.x());
+                    jvertex.push_back(vert_pts.y());
+                    jvertex.push_back(vert_pts.z());
+                    json["vertices"].push_back(jvertex);
+                }
+                surface.push_back(eachsurface);
+                surface_array.push_back(surface);
             }
-            surface_array.push_back(surface);
         }
         json["CityObjects"][type] = nlohmann::json::object();
         json["CityObjects"][type]["type"] = "Solid";
@@ -817,29 +821,45 @@ std::vector<std::vector<Point3>> march_cube(Point3 voxel, VoxelGrid& grid, doubl
         std::vector<Point3> triangle;
         triangle.push_back(edge_list[triTable[cubeindex][i]]);
         triangle.push_back(edge_list[triTable[cubeindex][i + 1]]);
-        triangle.push_back(edge_list[triTable[cubeindex][i] + 2]);
+        triangle.push_back(edge_list[triTable[cubeindex][i + 2]]);
         triangles.push_back(triangle);
     }
     return triangles;
 }
 
-std::vector<std::vector<Point3>> surface_extraction(VoxelGrid& grid, double res, int id1, int id2){
+std::vector<std::vector<Point3>> surface_extraction(VoxelGrid& grid, double res, int id){
     std::vector<std::vector<Point3>> surface;
     for(int n = 1; n < grid.max_x -1; ++n){
         for(int o = 1; o < grid.max_y -1; ++o){
             for(int p = 1; p < grid.max_z-1; ++p){
-                if (grid(n,o,p) == id1){
-                    //all building points are checked for exterior points
-                    std::vector<std::vector<Point3>> triangles = march_cube(Point3(n,o,p), grid, res, id2);
-                    for(auto& triangle: triangles){
-                        surface.push_back(triangle);
-                    }
+                std::vector<std::vector<Point3>> triangles = march_cube(Point3(n,o,p), grid, res, id);
+                for(auto& triangle: triangles){
+                    surface.push_back(triangle);
                 }
             }
+
         }
+
     }
     std::cout << "surface size: " << surface.size() << std::endl;
     return surface;
+}
+
+std::vector<std::vector<int>> to_surface_ids (const std::vector<std::vector<Point3>>& surface_ext,
+                                           std::map<int, Point3>& vertices_dict) {
+    std::vector<std::vector<int>> surface_ids;
+    for (auto const& tri : surface_ext) {
+        std::vector<int> triangeids;
+        for (auto const& vertex : tri) {
+            for (auto const& [vid, point] : vertices_dict) {
+                if (point == vertex) {
+                    triangeids.push_back(vid);
+                }
+            }
+        }
+        surface_ids.push_back(triangeids);
+    }
+    return surface_ids;
 }
 
 // ********** end
@@ -883,24 +903,7 @@ int main(int argc, const char * argv[]) {
 
 
     //Voxelisation
-    voxelisation(res, grid);
-    int voxels_1 = 0;
-    int voxels_0 = 0;
-    for (int i = 0; i < grid.max_x; ++i) { //--> marks rooms with each a different id
-        for (int j = 0; j < grid.max_y; ++j) {
-            for (int k = 0; k < grid.max_z; ++k) {
-                if (grid(i, j, k) == 1) {
-                    voxels_1++;
-                }
-                if (grid(i, j, k) == 0) {
-                    voxels_0++;
-                }
-            }
-        }
-    }
-    std::cout << "vox with 1 (after voxelisation): " << voxels_1 << std::endl;
-    std::cout << "vox with 0 (after voxelisation): " << voxels_0 << std::endl;
-
+    std::map<int, Point3> vertexdict = voxelisation(res, grid); // this also returns vertex dictionary
 
 //    marking_exterior(grid);
 //    std::cout <<"vector six func: " << vector_six_connect(Point3(0, 0, 0), grid)[0][0] << std::endl;
@@ -920,15 +923,7 @@ int main(int argc, const char * argv[]) {
                 if (grid(i,j,k) == 0) {
                     marking(Point3(i, j, k), id_rooms, grid);
                     id_rooms++;
-                    voxels_with_3++;
                 }
-                if (grid(i, j, k) == 1) {
-                    voxels_with_1++;
-                }
-                if (grid(i, j, k) == 2) {
-                    voxels_with_2++;
-                }
-
                 else {
                     continue;
                 }
@@ -936,6 +931,23 @@ int main(int argc, const char * argv[]) {
             }
         }
     }
+    // calculate voxels
+    for (int i = 0; i < grid.max_x; ++i) { //--> marks rooms with each a different id
+        for (int j = 0; j < grid.max_y; ++j) {
+            for (int k = 0; k < grid.max_z; ++k) {
+                if (grid(i, j, k) == 1) {
+                    voxels_with_1++;
+                }
+                if (grid(i, j, k) == 2) {
+                    voxels_with_2++;
+                }
+                if (grid(i, j, k) == 3) {
+                    voxels_with_3++;
+                }
+            }
+        }
+    }
+
     std::cout << "num of voxels marked with 1: " << voxels_with_1 << std::endl;
     std::cout << "num of voxels marked with 2: " << voxels_with_2 << std::endl;
     std::cout << "num of voxels marked with 3: " << voxels_with_3 << std::endl;
@@ -946,15 +958,50 @@ int main(int argc, const char * argv[]) {
     //SURFACE
     //outer envelope
     //gives a vector consisting of triangles with each 3 points
-    std::vector<std::vector<Point3>> surface_outer = surface_extraction(grid, res, 1, 1);
-
+    std::vector<std::vector<Point3>> surface_outer = surface_extraction(grid, res, 2);
+    // convert point3 to id
+    std::vector<std::vector<std::vector<int>>> allsurface;
+    std::vector<std::vector<int>> surface_ids = to_surface_ids(surface_outer, vertexdict);
+    // create list of building type
+    std::vector<std::string> buildingtype = {"Building"};
+//    for (int it = 0; it < surface_ids.size(); it++) {
+//        buildingtype.push_back("Building");
+//    }
+    allsurface.push_back(surface_ids);
 
     //rooms
     //i is the room number.
     std::vector<std::vector<std::vector<Point3>>> room_surfaces;
     for (int i = 3; i <= id_rooms; ++i){
-        room_surfaces.push_back(surface_extraction(grid, res, i, 1));
+        room_surfaces.push_back(surface_extraction(grid, res, i));
     }
+    std::cout << "surface extracted " << std::endl;
+
+    for (auto const& room_sur : room_surfaces) {
+        std::vector<std::vector<int>> room_surfaces_ids;
+        std::vector<std::vector<int>> room_surface_ids = to_surface_ids(room_sur, vertexdict);
+        // result: room surface 1 = [ [t1, t2, t3, ...], [t4, t5, t6, t7, ...] ]
+        for (auto & room_id : room_surface_ids) {
+            room_surfaces_ids.push_back(room_id);
+        }
+        allsurface.push_back(room_surfaces_ids);
+        buildingtype.push_back("BuildingRoom");
+    }
+
+    // a whole list of surface ids
+
+    std::cout << "building type list size: " << buildingtype.size() << std::endl;
+    std::cout << "surface id list size: " << allsurface.size() << std::endl;
+
+    /* write cityjson
+     * void write_cityjson(std::string outputfile,
+                    std::map<int, Point3>& vertices_dict,
+                    std::vector<std::vector<std::vector<int>>>& markedsurface,
+                    std::vector<std::string> buildingtype){
+     */
+    const std::string outputfile = "output.city.json";
+    write_cityjson("output.city.json", vertexdict, allsurface, buildingtype);
+    std::cout << "cityjson done" << std::endl;
 
     return 0;
 
